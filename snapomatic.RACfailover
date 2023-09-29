@@ -1,0 +1,524 @@
+#! /usr/bin/python3
+import sys
+pythonversion=sys.version_info
+if pythonversion[0] != 3 or (pythonversion[1] < 6 or pythonversion[1] > 11):
+    print("This script requires Python 3.6 through 3.11")
+    sys.exit(1)
+sys.path.append(sys.path[0] + "/NTAPlib")
+import os
+import platform
+import re
+from getOracleHome import getOracleHome
+from doProcess import doProcess
+from discoverLUN import discoverLUN
+from doSqlplus import doSqlplus
+from getOwner import getOwner
+from getOracleBase import getOracleBase
+import userio
+import string
+import time
+
+snapomaticversion='DEV'
+
+validoptions={'volpattern':'str','recoverypoint':'timestamp','debug':'bool','noscan':'bool','noafd':'bool','noasmlib':'bool','iscsi':'bool'}
+requiredoptions=['volpattern']
+
+usage="Version " + snapomaticversion + "\n" + \
+      "RACfailover --volpattern\n" + \
+      "           (target volume pattern)\n\n" + \
+      "           --recoverypoint\n" + \
+      "           (recovery timestamp in YYYY-MM-DDTHH:MM:SS[TZ])\n\n" + \
+      "            --debug\n" + \
+      "           (print process STDOUT and STDERR)\n\n" + \
+      "            --iscsi\n" + \
+      "           (Scan for iSCSI LUNs)\n\n" + \
+      "            --noscan\n" + \
+      "           (Bypass LUN scanning)\n\n" + \
+      "            --noafd\n" + \
+      "           (Bypass ASM Filter Driver scanning)\n\n" + \
+      "            --noasmlib\n" + \
+      "           (Bypass ASMlib scanning)\n"
+
+myoptions=userio.validateoptions(sys.argv,validoptions,usage=usage,required=requiredoptions)
+volpattern=myoptions['OPTS']['volpattern']
+
+localhost=platform.node().split('.', 1)[0]
+
+if volpattern == '*':
+    volpatternmatch=re.compile('^.*.$')
+elif re.findall(r'[?*.^$]',volpattern):
+    volpatternmatch=re.compile(volpattern)
+else:
+    print("WARNING: No wildcard detected in --volpattern")
+    volpatternmatch=re.compile('^' + volpattern + '$')
+
+try:
+    debug=myoptions['OPTS']['debug']
+    if debug:
+        debug=25
+except:
+    debug=0
+
+try:
+    noscan=myoptions['OPTS']['noscan']
+except:
+    noscan=False
+
+try:
+    noasmlib=myoptions['OPTS']['noasmlib']
+except:
+    noasmlib=False
+
+try:
+    noafd=myoptions['OPTS']['noafd']
+except:
+    noafd=False
+
+try:
+    scaniscsi=myoptions['OPTS']['iscsi']
+except:
+    scaniscsi=False
+
+try:
+    recoverypoint=myoptions['OPTS']['recoverypoint']
+    rmanrecoverysecs=recoverypoint+time.localtime().tm_gmtoff
+    rmanrecoverypoint=time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(rmanrecoverysecs))
+except:
+    rmanrecoverypoint=False
+
+gridhome=getOracleHome(grid=True,debug=debug)
+if not gridhome.go():
+    print("Unable to discover Grid home for host")
+    if not debug:
+        gridhome.showDebug()
+    sys.exit(1)
+
+homes=getOracleHome(debug=debug)
+if not homes.getVersion():
+    print("Unable to discover ORACLE_HOME verions")
+    if not debug:
+        homes.showDebug()
+    sys.exit(1)
+
+versionmapping={}
+for home in homes.installed.keys():
+    versionmapping[homes.installed[home]['release']]=home
+    if homes.installed[home]['version'] is not None:
+        versionmapping[homes.installed[home]['version']] = home
+
+if noscan:
+    print()
+    print("Bypassing LUN scanning...")
+    print()
+else:
+    for item in gridhome.olsnodes.keys():
+        if item == localhost:
+            ssh=None
+        else:
+            ssh=item
+        if scaniscsi:
+            print("Updating iSCSI targets")
+            out=doProcess("/usr/sbin/iscsiadm -m session --rescan",env={'PATH':'/usr/bin:/usr/sbin:/bin'},ssh=ssh,debug=debug)
+        else:
+            print("Scanning for FC LUNs")
+            out=doProcess("/usr/bin/rescan-scsi-bus.sh",env={'PATH':'/usr/bin:/usr/sbin:/bin'},ssh=ssh,debug=debug)
+        if not debug and out.result > 0:
+            out.showDebug()
+            sys.exit(1)
+    print()
+    print("Sleeping for 10 seconds while multipath maps are built")
+    time.sleep(10)
+    print()
+
+if noafd:
+    print("Bypassing ASM Filter Driver scanning...")
+    print()
+else:
+    print("Discovering AFD devices...")
+    for item in gridhome.olsnodes.keys():
+        if item == localhost:
+            ssh=None
+        else:
+            ssh=item
+        out=doProcess(gridhome.home + '/bin/asmcmd afd_lslbl',env={'ORACLE_HOME':gridhome.home,
+                                                                   'ORACLE_BASE':gridhome.base},
+                                                              ssh=ssh,
+                                                              debug=debug)
+        if not debug and out.result > 0:
+            out.showDebug()
+    
+    print("Refreshing AFD configuration")
+    for item in gridhome.olsnodes.keys():
+        if item == localhost:
+            ssh=None
+        else:
+            ssh=item
+        out=doProcess(gridhome.home + '/bin/asmcmd afd_refresh',env={'ORACLE_HOME':gridhome.home,
+                                                                     'ORACLE_BASE':gridhome.base},
+                                                                ssh=ssh,
+                                                                debug=debug)
+        success=False
+        for y in range (0,len(out.stdout)):
+            try:
+                if out.stdout[y][-7:] == 'echo $?' and not out.stdout[y+1] == '0':
+                    success=True
+            except Exception as e:
+                pass
+        if not debug and out.result > 0:
+            out.showDebug()
+    print()
+
+if noasmlib:
+    print("Bypassing ASMlib scanning...")
+    print()
+else:
+    print("Refreshing ASMlib configuration")
+    for item in gridhome.olsnodes.keys():
+        if item == localhost:
+            ssh=None
+        else:
+            ssh=item
+        out=doProcess('/usr/sbin/oracleasm scandisks',ssh=ssh,debug=debug)
+        success=False
+        for y in range (0,len(out.stdout)):
+            try:
+                if out.stdout[y][-7:] == 'echo $?' and not out.stdout[y+1] == '0':
+                    success=True
+            except Exception as e:
+                pass
+        if not success:
+            print("Unable to scan ASMlib disks on host " + item)
+
+diskgroups=[]
+print("Retrieving ASM diskgroup names")
+multipaths=[]
+devices=os.listdir('/dev')
+for lun in devices:
+    if len(lun) > 3 and lun[:3] == 'dm-':
+        out=discoverLUN('/dev/' + lun,debug=debug)
+        if out.go():
+            multipaths.append(out)
+
+for item in multipaths:
+    if item.luntype == 'NETAPP' and re.match(volpatternmatch,item.volume):
+        header=doProcess(gridhome.home + '/bin/kfed read ' + item.path, env={'ORACLE_HOME':gridhome.home}
+                                                                      , debug=debug)
+        if header.stdout is not None:
+            try:
+                getgrp=[line for line in header.stdout if 'kfdhdb.grpname' in line][0]
+                diskgroup=getgrp.split()[1]
+                diskgroups.append(diskgroup)
+            except:
+                pass
+diskgroups=list(set(diskgroups))
+for item in diskgroups:
+    print(">> Identified diskgroup " + item)
+print()
+
+if len(diskgroups) == 0:
+    print("ERROR: No diskgroups found on volumes that match pattern " + volpattern)
+    sys.exit(1)
+
+print("Identifying currently mounted ASM diskgroups")
+out=doSqlplus('+ASM' + gridhome.olsnodes[localhost],'select name,state from v$asm_diskgroup;',
+               user=gridhome.user,
+               priv='sysasm',
+               home=gridhome.home,
+               base=gridhome.base,
+               debug=debug)
+if out.result > 0 and not debug:
+    out.showDebug()
+    sys.exit(1)
+
+diskgroups2mount=diskgroups.copy()
+
+for item in out.stdout:
+    try:
+        name,state = item.split()
+        if state == 'MOUNTED' and name in diskgroups2mount:
+            print(">> ASM diskgroup " + name + " is mounted")
+            diskgroups2mount.remove(name)
+    except:
+        pass
+print()
+
+print("Mounting ASM diskgroups...")
+for item in gridhome.olsnodes.keys():
+    for diskgroup in diskgroups2mount:
+        print("Mounting " + diskgroup + " on host " + item)
+        if item == localhost:
+            ssh=None
+        else:
+            ssh=item
+        out=doSqlplus('+ASM' + gridhome.olsnodes[item], 'alter diskgroup ' + diskgroup + ' mount;',
+                      user=gridhome.user,
+                      priv='sysasm',
+                      home=gridhome.home,
+                      base=gridhome.base,
+                      ssh=ssh,
+                      feedback=True,
+                      debug=debug)
+        
+        if out.result > 0:
+            print("Unable to run sqlplus on host " + item)
+
+        if out.result > 0 and not debug:
+            out.showDebug()
+
+        success=False
+        for line in out.stdout:
+            if 'Diskgroup altered.' in line or 'is already mounted' in line:
+                success=True
+                break
+        if not success:
+            print("Unable to mount diskgroup " + diskgroup + " on host " + item)
+            if not debug:
+                out.showDebug()
+print()
+
+diskgroupmap={}
+print("Discovering contents of ASM diskgroup")
+print("Retrieving contents of diskgroups...")
+print(">> Running asmcmd...")
+out=doProcess(gridhome.home + '/bin/asmcmd ls */*/*',
+              env={'ORACLE_HOME':gridhome.home,
+                   'ORACLE_BASE':gridhome.base},
+              debug=debug)
+
+if out.result > 0 and not debug:
+    out.showDebug()
+
+if out.result > 0:
+    print("Failed to run asmcmd ls */*/*")
+    sys.exit(1)
+
+for x in range(0,len(out.stdout)):
+    elements=out.stdout[x].split('/')
+    if len(elements) > 2 and elements[0][0]=='+' and elements[0][1:] in diskgroups:
+        if elements[1] not in diskgroupmap.keys():
+            diskgroupmap[elements[1]]={'DISKGROUPS':[],'SPFILE':None,'PWFILE':None}
+        if elements[0][1:] not in diskgroupmap[elements[1]]['DISKGROUPS']:
+            print(">> Found directory " + elements[1] + ' on diskgroup ' + elements[0])
+            diskgroupmap[elements[1]]['DISKGROUPS'].append(elements[0][1:])
+    if len(elements) == 4 and elements[0][1:] in diskgroups:
+        if elements[2] == 'PARAMETERFILE':
+            diskgroupmap[elements[1]]['SPFILE']=out.stdout[x][:-1] + out.stdout[x+1]
+        elif elements[2] == 'PASSWORD':
+            diskgroupmap[elements[1]]['PWFILE']=out.stdout[x][:-1] + out.stdout[x+1]
+
+if debug:
+    print("Diskgroup map dictionary: " + str(diskgroupmap))
+
+potentialdatabases=list(diskgroupmap.keys())
+for key in potentialdatabases:
+    if diskgroupmap[key]['SPFILE'] is None or diskgroupmap[key]['PWFILE'] is None:
+        del diskgroupmap[key]
+    else:
+        print(">> Identified database " + key)
+        diskgroupmap[key]['DISKGROUPS']=list(set(diskgroupmap[key]['DISKGROUPS']))
+print()
+
+nohome=[]
+registered=[]
+availversions=list(versionmapping.keys())
+availversions.sort()
+if debug:
+    print("Oracle version map: " + str(versionmapping))
+print("Extracting spfiles...")
+for dbuname in diskgroupmap.keys():
+    print(">>  Attempting to create pfile from spfile " + diskgroupmap[dbuname]['SPFILE'])
+    oraclehome=False
+    for version in availversions:
+        oraclebase=getOracleBase(versionmapping[version])
+        oraclebase.go()
+        print("  >> Using ORACLE_HOME " + versionmapping[version])
+        tmppfile='/tmp/pfile.tmp.' + userio.randomtoken()
+        out=doSqlplus(dbuname,"create pfile='" + tmppfile \
+                                               + "' from spfile='" \
+                                               + diskgroupmap[dbuname]['SPFILE'] \
+                                               + "';",
+                      user=oraclebase.user,
+                      home=oraclebase.home,
+                      base=oraclebase.base,
+                      local=True,
+                      debug=debug)
+        if out.result > 0 or out.errorflag:
+            print("Failed to run sqlplus")
+            print(out.reason)
+        else:
+            print("  >> Parsing pfile")
+            params=open(tmppfile,'r').read().splitlines()
+            for line in params:
+                if 'compatible=' in line:
+                    compatversion=line.split('=')[1].replace('"','').replace("'",'')
+                    print(">> Database " + dbuname + " configured for " + compatversion)
+                    for avail in availversions:
+                        if compatversion == avail[:len(compatversion)]:
+                            oraclehome=versionmapping[avail]
+                if 'db_name=' in line:
+                    dbname=line.split('=')[1].replace('"','').replace("'",'')
+                    dbname='N' + dbname
+                    print(">> Database " + dbuname + " has db_name of " + dbname)
+        if oraclehome:
+            break
+
+    if not oraclehome:
+        print("  >> Unable to find ORACLE_HOME that can support this database")
+        nohome.append(dbuname)
+    else:
+        print("  >> Compatible ORACLE_HOME found at " + oraclehome)
+        print(">> Creating directory structure")
+        oracleuser=getOwner(oraclehome)
+        dirs=[homes.installed[oraclehome]['base'] + "/admin/" + dbuname + "/adump", \
+              homes.installed[oraclehome]['base'] + "/admin/" + dbuname + "/dpdump", \
+              homes.installed[oraclehome]['base'] + "/admin/" + dbuname + "/hdump", \
+              homes.installed[oraclehome]['base'] + "/admin/" + dbuname + "/pfile", \
+              homes.installed[oraclehome]['base'] + "/admin/" + dbuname + "/scripts", \
+              homes.installed[oraclehome]['base'] + "/admin/" + dbuname + "/xdb_wallet", \
+              homes.installed[oraclehome]['base'] + "/audit/" + dbuname + "/adump"]
+        mkdirs="/usr/bin/mkdir -p " + ' '.join(dirs)
+        for item in gridhome.olsnodes.keys():
+            print("  >> Running mkdir commands on host " + item)
+            if item == localhost:
+                out=doProcess(mkdirs, \
+                              user=oracleuser.user, \
+                              env={'PATH':'/usr/bin,/usr/local/bin,/bin'},
+                              debug=debug)
+            else:
+                out=doProcess("ssh " + item,user=oracleuser.user,stdin=mkdirs)
+        print(">> Running svrctl add for " + dbuname)
+        out=doProcess(oraclehome + '/bin/srvctl add database -db ' + dbuname \
+                                    + ' -dbname ' + dbname \
+                                    + ' -oraclehome ' + oraclehome \
+                                    + ' -spfile ' + diskgroupmap[dbuname]['SPFILE'] \
+                                    + ' -pwfile ' + diskgroupmap[dbuname]['PWFILE'] \
+                                    + ' -server ' + localhost \
+                                    + ' -diskgroup ' + ','.join(diskgroupmap[dbuname]['DISKGROUPS']) \
+                                    + ' -dbtype RACONENODE',
+                       env={'ORACLE_HOME':oraclehome,
+                            'ORACLE_BASE':oraclebase.base},
+                       user=oracleuser.user,
+                       debug=debug)
+        if out.result > 0 and not debug:
+            out.showDebug()
+
+        if out.result > 0:
+            print("  >> Error registering database")
+        else:
+            print("  >> Database registration successful")
+        registered.append((dbuname,oraclehome,oraclebase.base,oracleuser.user))
+        print()
+
+print()
+
+mounted=[]
+print("Starting databases...")
+for dbuname,oraclehome,oraclebase,oracleuser in registered:
+    mountcomplete=False
+    print(">> Mounting database " + dbuname)
+    out=doProcess(oraclehome + '/bin/srvctl start database -db ' + dbuname + " -startoption mount",
+                  env={'ORACLE_HOME':oraclehome,
+                       'ORACLE_BASE':oraclebase},
+                       user=oracleuser,
+                       debug=debug)
+    if out.result == 0:
+        print("  >> Database mounted")
+        mounted.append((dbuname,oraclehome,oraclebase,oracleuser))
+        mountcomplete=True
+    else:
+        for line in out.stdout:
+            if 'is already running' in line:
+                print("Database " + dbuname + " is already running, will attempt recovery")
+                mounted.append((dbuname,oraclehome,oraclebase,oracleuser))
+                mountcomplete=True
+                break
+        if (dbuname,oraclehome,oraclebase,oracleuser) not in mounted:
+            print("  >> Error mounting database")
+            if not debug:
+                out.showDebug()
+
+    if (out.result > 0 or not mountcomplete) and not debug:
+        out.showDebug()
+
+print()
+
+recovered=[]
+print("Recovering databases...")
+for dbuname,oraclehome,oraclebase,oracleuser in mounted:
+    recoverycomplete=False
+    print(">> Recovering database " + dbuname)
+    if rmanrecoverypoint:
+        out=doSqlplus(dbuname + '_1',"recover automatic until time '" + rmanrecoverypoint + "';",
+                      user=oracleuser,
+                      home=oraclehome,
+                      base=oraclebase,
+                      debug=debug)
+    else:
+        out=doSqlplus(dbuname + '_1','recover automatic;',
+                      user=oracleuser,
+                      home=oraclehome,
+                      base=oraclebase,
+                      debug=debug)
+    if out.result == 0 and len(out.stdout) > 0:
+        for line in out.stdout:
+            print(line)
+            if 'Media recovery complete' or 'no recovery required' in line:
+                print(">> Database " + dbuname + " recovery complete")
+                recovered.append((dbuname,oraclehome,oraclebase,oracleuser))
+                recoverycomplete=True
+                break 
+
+    if (out.result > 0 or not recoverycomplete) and not debug:
+       out.showDebug()
+print()
+
+opened=[]
+alreadyopen=[]
+print("Opening databases...")
+for dbuname,oraclehome,oraclebase,oracleuseroracle in recovered:
+    print(">> Opening database " + dbuname)
+    if rmanrecoverypoint:
+        out=doSqlplus(dbuname + '_1','alter database open resetlogs;',
+                      user=oracleuser,
+                      home=oraclehome,
+                      base=oraclebase,
+                      debug=debug)
+
+    else:
+        out=doSqlplus(dbuname + '_1','alter database open;',
+                      user=oracleuser,
+                      home=oraclehome,
+                      base=oraclebase,
+                      debug=debug)
+    if out.result > 0 and not debug:
+       out.showDebug()
+    else:
+        for line in out.stdout:
+            if 'database already open' in line:
+                print(">> Database " + dbuname + " already open")
+                check4open=True
+                alreadyopen.append(dbuname)
+                break
+
+        out=doSqlplus(dbuname + '_1','select status from v$instance',
+                      user=oracleuser,
+                      home=oraclehome,
+                      base=oraclebase,
+                      debug=debug)
+        if dbuname not in alreadyopen:
+            if out.result > 0:
+                print(">> Failed to run sqlplus")
+                failed.append(dbuname)
+            elif len(out.stdout) > 0 and out.stdout[-1] == 'OPEN':
+                print(">> Database " + dbuname + " is open")
+                opened.append(dbuname)
+            if out.result > 0 and not debug:
+                out.showDebug()
+
+print()
+
+print("Results:")
+for item in opened:
+    print('Database ' + item + " failover complete")
+for item in alreadyopen:
+    print('Database ' + item + ' was opened by external user')

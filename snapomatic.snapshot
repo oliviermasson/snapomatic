@@ -1,0 +1,203 @@
+#! /usr/bin/python3
+import sys
+pythonversion=sys.version_info
+if pythonversion[0] != 3 or (pythonversion[1] < 6 or pythonversion[1] > 11):
+    print("This script requires Python 3.6 through 3.11")
+    sys.exit(1)
+sys.path.append(sys.path[0] + "/NTAPlib")
+from getSnapshots import getSnapshots
+from createSnapshots import createSnapshots
+from deleteSnapshots import deleteSnapshots
+import userio
+
+snapomaticversion='DEV'
+
+knownmodes=['show','create','delete','restore']
+
+validoptions={}
+validoptions['create']={'name':'str','prefix':'str','target':'str','cg':'bool','label':'str', \
+                        'debug':'bool', \
+                        'restdebug':'bool'}
+
+validoptions['restore']={'name':'str','target':'str','cg':'bool', \
+                         'debug':'bool', \
+                         'restdebug':'bool'}
+
+validoptions['show']={'name':'str','prefix':'str','target':'str','cg':'bool', \
+                      'debug':'bool', \
+                      'restdebug':'bool'}
+
+validoptions['delete']={'name':'str','prefix':'str','target':'str','maxcount':'int','maxage':'str', \
+                        'debug':'bool', \
+                        'force':'bool', \
+                        'restdebug':'bool'}
+
+requiredoptions={'create'   :['target',['name','prefix']], \
+                 'restore'  :['target','name'], \
+                 'show'      :['target'], \
+                 'delete'   :['target',['name','prefix','maxcount','maxage']]}
+
+usage="Version " + snapomaticversion + "\n" + \
+      "snapshot show\n" + \
+      "        [--target]\n" + \
+      "        (name of target for snapshot operation)\n" + \
+      "        [--name]\n" + \
+      "        (filesystem, LUN target, or svm:volume)\n\n" + \
+      "        (Optional. Name for snapshot. Wildcards accepted)\n\n" + \
+      "        [--debug]\n" + \
+      "        (show debug output)\n\n" + \
+      "        [--restdebug]\n" + \
+      "        (show REST API debug output)\n\n" \
+      "snapshot create\n" + \
+      "        [--target]\n" + \
+      "        (name of target for snapshot operation)\n" + \
+      "        (filesystem, LUN target, or svm:volume)\n\n" + \
+      "        [--name||prefix]\n" + \
+      "        (Name or prefix for snapshot)\n\n" + \
+      "        [--label|]\n" + \
+      "        (Snapmirror label for the snapshot)\n\n" + \
+      "        [--debug]\n" + \
+      "        (show debug output)\n\n" + \
+      "        [--restdebug]\n" + \
+      "        (show REST API debug output)\n\n" + \
+      "snapshot delete\n" + \
+      "        [--target]\n" + \
+      "        (name of target for snapshot operation)\n" + \
+      "        (filesystem, LUN target, or svm:volume)\n\n" + \
+      "        [--name]\n" + \
+      "        (Optional. Name of snapshot. Wildcards accepted)\n\n" + \
+      "        [--maxcount]\n" + \
+      "        (Optional. Maximum number of snapshots to retain)\n\n" + \
+      "        [--maxage]\n" + \
+      "        (Optional. Maximum age of snapshots to retain.\n" + \
+      "        (Accepts d[ays]/h[ours]/m[inutes]/[s]econds\n\n" + \
+      "        [--force]\n" + \
+      "        (Override all safeguards)\n\n" + \
+      "        [--debug]\n" + \
+      "        (show debug output)\n\n" + \
+      "        [--restdebug]\n" + \
+      "        (show REST API debug output)\n" 
+
+myoptions=userio.validateoptions(sys.argv,validoptions,modes=knownmodes,usage=usage,required=requiredoptions)
+
+if 'prefix' in myoptions['OPTS'].keys() and 'name' in myoptions['OPTS'].keys():
+    userio.fail("Cannot use both --name and --prefix")
+
+target=myoptions['OPTS']['target']
+try:
+    out=target.split(':')
+    svm=out[0]
+    targettype='VOL'
+    if len(out) == 1:
+        volumes='*'
+    elif len(out) == 2:
+        volumes=out[1]
+    else:
+        userio.fail(usage)
+except:
+    pass
+
+debug=0
+try:
+    if myoptions['OPTS']['debug']:
+        debug=debug+1
+except:
+    pass
+try:
+    if myoptions['OPTS']['restdebug']:
+        debug=debug+2
+except:
+    pass
+
+try:
+    name=myoptions['OPTS']['name']
+except:
+    name=None
+
+try:
+    label=myoptions['OPTS']['label']
+except:
+    label=None
+
+try:
+    if myoptions['MODE'] == 'create':
+        name=myoptions['OPTS']['prefix'] + '_' + userio.randomtoken()[:32]
+    if myoptions['MODE'] == 'delete' or myoptions['MODE'] == 'show':
+        name=myoptions['OPTS']['prefix'] + '_*'
+except:
+    try:
+        name=myoptions['OPTS']['name']
+    except:
+        pass
+
+try:
+    maxcount=myoptions['OPTS']['maxcount']
+except:
+    maxcount=False
+
+try:
+    maxage=myoptions['OPTS']['maxage']
+except:
+    maxage=False
+
+try:
+    force=myoptions['OPTS']['force']
+except:
+    force=False
+
+try:
+    if (name == '*' or name == '.*' or name == '.*$') and myoptions['OPTS']['force']:
+        pass
+except:
+    userio.fail("Cannot use snapshot wildcard without --force")
+
+if myoptions['MODE'] == 'delete':
+    if targettype=='VOL':
+        snapshots=deleteSnapshots(svm,volumes,name,force=force,maxcount=maxcount,maxage=maxage,debug=debug)
+        if not snapshots.go():
+            userio.message("ERROR: " + snapshots.reason)
+        else:
+            userio.message("Success")
+        grid=[['Volume','Snapshot','Status']]
+        deletedvols=list(snapshots.deleted.keys())
+        deletedvols.sort()
+        for volume in deletedvols:
+            for snap in snapshots.deleted[volume]:
+                grid.append([volume,snap,'Deleted'])
+        failed2delete=list(snapshots.failed.keys())
+        failed2delete.sort()
+        for volume in failed2delete:
+            for snap in snapshots.failed[volume]:
+                grid.append([volume,snap,'FAIL'])
+        if len(failed2delete) > 0 or len(deletedvols) > 0:
+            userio.grid(grid)
+
+elif myoptions['MODE'] == 'create':
+    if targettype=='VOL':
+        snapshots=createSnapshots(svm,volumes,name,label=label,debug=debug)
+        if not snapshots.go():
+            userio.message("ERROR: " + snapshots.reason)
+        else:
+            userio.message("Success")
+            grid=[['Volume','Snapshot','Status']]
+            for volume in snapshots.success:
+                grid.append([volume,name,'Success'])
+            for volume in snapshots.failed:
+                grid.append([volume,name,'Fail'])
+            userio.grid(grid)
+
+elif myoptions['MODE'] == 'show':
+    if targettype=='VOL':
+        snapshots=getSnapshots(svm,volumes=volumes,name=name,debug=debug)
+        if not snapshots.go():
+            userio.message("ERROR: " + snapshots.reason)
+            sys.exit(1)
+        else:
+            grid=[['Volume','Snapshot','Date']]
+            volumelist=list(snapshots.snapshots.keys())
+            volumelist.sort()
+            for volume in volumelist:
+                snapshotlist=sorted(snapshots.snapshots[volume]['ordered'],key=lambda x: int(x[1]))
+                for snapshot,epoch in snapshotlist:
+                    grid.append([volume,snapshot,snapshots.snapshots[volume]['snapshots'][snapshot]['createtime']])
+            userio.grid(grid)

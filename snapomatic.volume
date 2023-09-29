@@ -1,0 +1,127 @@
+#! /usr/bin/python3
+import sys
+pythonversion=sys.version_info
+if pythonversion[0] != 3 or pythonversion[1] < 6:
+    print("This script requires Python 3.6 or higher")
+    sys.exit(1)
+import os
+import getopt
+sys.path.append(sys.path[0] + "/NTAPlib")
+from cloneVolumes import cloneVolumes
+from getVolumes import getVolumes
+import userio
+
+snapomaticversion='dev'
+
+knownmodes=['show','clone','restore']
+
+validoptions={'clone' : {'target':'str', \
+                         'name':'str', \
+                         'snapshot':'str', \
+                         'split':'bool', \
+                         'debug':'bool', \
+                         'restdebug':'bool'}, \
+              'show' : {'target':'str', \
+                        'debug':'bool', \
+                        'restdebug':'bool'},
+              'debug':'bool',
+              'restdebug':'bool'}
+
+requiredoptions={'clone':['target','name'], \
+                 'show':['target']}
+
+usage="Version " + snapomaticversion + "\n" + \
+      "volume show\n" + \
+      "          --target\n" + \
+      "          (syntax: svm:volume)\n\n" + \
+      "volume clone\n" + \
+      "          --target\n" + \
+      "          (syntax: svm:volume)\n\n" + \
+      "          --name\n" + \
+      "          (name for the clone)\n\n" + \
+      "          --snapshot\n" + \
+      "          (OPTIONAL: name of the parent snapshot)\n\n" + \
+      "          --split\n" + \
+      "          (OPTIONAL: split the clone from parent)\n\n" + \
+      "          [--debug]\n" + \
+      "          (show debug output)\n\n" + \
+      "          [--restdebug]\n" + \
+      "          (show REST API calls and responses)\n\n"
+
+myoptions=userio.validateoptions(sys.argv,validoptions,modes=knownmodes,usage=usage,required=requiredoptions)
+
+try:
+    snapshot=myoptions['OPTS']['snapshot']
+except:
+    snapshot=False
+try:
+    split=myoptions['OPTS']['split']
+except:
+    split=False
+
+try:
+    name=myoptions['OPTS']['name']
+except:
+    pass
+
+debug=0
+try:
+    if myoptions['OPTS']['debug']:
+        debug=debug+1
+except:
+    pass
+try:
+    if myoptions['OPTS']['restdebug']:
+        debug=debug+2
+except:
+    pass
+
+target=myoptions['OPTS']['target']
+try:
+    out=target.split(':')
+    svm=out[0]
+    targettype='VOL'
+    if len(out) == 1:
+        volumes='*'
+    elif len(out) == 2:
+        volumes=out[1]
+    else:
+        userio.fail(usage)
+    if myoptions['MODE'] == 'clone':
+        if len(volumes.split(',')) > 1:
+            userio.fail(usage)
+        else:
+            volume=volumes
+except:
+    pass
+
+if myoptions['MODE'] == 'show':
+    volumes=getVolumes(svm,volumes=volumes,debug=debug)
+    if not volumes.go():
+        userio.message(volumes.reason)
+        sys.exit(1)
+    else:
+        grid=[['volume','size (GB)','aggregate','uuid']]
+        volumelist=list(volumes.volumes.keys())
+        volumelist.sort()
+        for volume in volumelist:
+            grid.append([volume,str(volumes.volumes[volume]['size']/1048576),volumes.volumes[volume]['aggrs'],volumes.volumes[volume]['uuid']])
+        userio.grid(grid)
+
+elif myoptions['MODE'] == 'clone':
+    if snapshot:
+        clone=cloneVolumes(svm,(volume,name,snapshot),split=split,debug=debug)
+    else:
+        clone=cloneVolumes(svm,(volume,name),split=split,debug=debug)
+    if not clone.go():
+        userio.message(clone.reason)
+        sys.exit(1)
+    else:
+        message="Cloned "
+        if split and name not in clone.unsplit:
+            message = message + "and split "
+        message=message + name + " from " + volume 
+        if snapshot:
+            message=message + ":" + snapshot
+        userio.message(message)
+        sys.exit(0)

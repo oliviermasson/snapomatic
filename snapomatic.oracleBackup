@@ -1,0 +1,55 @@
+#! /usr/bin/python3
+import sys
+pythonversion=sys.version_info
+if pythonversion[0] != 3 or (pythonversion[1] < 6 or pythonversion[1] > 11):
+    print("This script requires Python 3.6 through 3.11")
+    sys.exit(1)
+sys.path.append(sys.path[0] + "/NTAPlib")
+import setOracleBackup
+import userio
+
+snapomaticversion='DEV'
+
+validoptions={'sid':'str','stop':'bool','start':'bool','debug':'bool','force':'bool'}
+
+requiredoptions=['sid',['start','stop']]
+
+usage="Version " + snapomaticversion + "\n" + \
+      "oracleBackup\n" + \
+      "        [--sid]\n" + \
+      "        (name of database SID or comma-delimited list\n" + \
+      "        [--start or --stop]\n" + \
+      "        (start or stop backup mode)\n" \
+      "        [--force]\n" + \
+      "        (ignore current backup state of datafiles)\n" \
+      "        [--debug]\n" + \
+      "        (show debug output)\n"
+
+myoptions=userio.validateoptions(sys.argv,validoptions,usage=usage,required=requiredoptions)
+
+sid=myoptions['OPTS']['sid']
+
+if 'debug' in myoptions['OPTS'].keys():
+    debug=25
+else:
+    debug=0
+
+if 'force' in myoptions['OPTS'].keys():
+    force=True
+else:
+    force=False
+
+sid=myoptions['OPTS']['sid']
+
+try:
+    command = myoptions['OPTS']['start']
+except:
+    command = not myoptions['OPTS']['stop']
+    
+sidlist=sid.split(',')
+for sid in sidlist:
+    change=setOracleBackup.setOracleBackup(sid,debug=debug,force=force)
+    if change.go(command):
+        userio.message("Success: " + sid + ":backup mode " + str(command))
+    else:
+        userio.warn(change.reason)

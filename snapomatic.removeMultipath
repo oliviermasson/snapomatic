@@ -1,0 +1,39 @@
+#! /usr/bin/python3
+import sys
+pythonversion=sys.version_info
+if pythonversion[0] != 3 or (pythonversion[1] < 6 or pythonversion[1] > 11):
+    print("This script requires Python 3.6 through 3.11")
+    sys.exit(1)
+sys.path.append(sys.path[0] + "/NTAPlib")
+import removeMultipath
+import userio
+import getopt
+
+snapomaticversion='DEV'
+
+validoptions={'path':'str',
+              'debug':'bool'}
+
+requiredoptions=['path']
+
+usage="Version " + snapomaticversion + "\n" + \
+      "removeMultipath --path\n" + \
+      "               (name of target svm)\n\n" + \
+      "               [--debug]\n" + \
+      "               (show debug output)\n"
+
+myoptions=userio.validateoptions(sys.argv,validoptions,usage=usage,required=requiredoptions)
+
+path=myoptions['OPTS']['path']
+
+try:
+    debug=myoptions['OPTS']['debug']
+except:
+    debug=False
+
+out=removeMultipath.removeMultipath(path,debug=debug,verbose=2)
+if out.result > 0:
+    print(out.reason)
+    sys.exit(1)
+else:
+    sys.exit(0)

@@ -1,0 +1,56 @@
+#! /usr/bin/python3
+import sys
+pythonversion=sys.version_info
+if pythonversion[0] != 3 or pythonversion[1] < 6:
+    print("This script requires Python 3.6 or higher")
+    sys.exit(1)
+import os
+import getopt
+sys.path.append(sys.path[0] + "/NTAPlib")
+from destroyVolumes import destroyVolumes
+import userio
+
+snapomaticversion='dev'
+
+validoptions={'svm':'str',
+              'volume':'str',
+              'debug':'bool',
+              'restdebug':'bool'}
+
+requiredoptions=['svm','volume']
+
+usage="Version " + snapomaticversion + "\n" + \
+      "          --svm\n" + \
+      "          (name of target svm)\n\n" + \
+      "          --volume\n" + \
+      "          (volume name)\n\n" + \
+      "          [--debug]\n" + \
+      "          (show debug output)\n\n" + \
+      "          [--restdebug]\n" + \
+      "          (show REST API calls and responses)\n\n"
+
+myoptions=userio.validateoptions(sys.argv,validoptions,usage=usage,required=requiredoptions)
+
+debug=0
+
+svm=myoptions['OPTS']['svm']
+volume=myoptions['OPTS']['volume']
+
+try:
+    if myoptions['OPTS']['debug']:
+        debug=debug+1
+except:
+    pass
+try:
+    if myoptions['OPTS']['restdebug']:
+        debug=debug+2
+except:
+    pass
+
+destroy=destroyVolumes(svm,volume,debug=debug)
+if not destroy.go():
+    userio.message(destroy.reason)
+    sys.exit(1)
+else:
+    userio.message("Destroyed " + svm + ":" + volume)
+    sys.exit(0)

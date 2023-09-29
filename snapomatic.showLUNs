@@ -1,0 +1,36 @@
+#! /usr/bin/python3
+import sys
+pythonversion=sys.version_info
+if pythonversion[0] != 3 or pythonversion[1] < 6:
+    print("This script requires Python 3.6 or higher")
+    sys.exit(1)
+import os
+sys.path.append(sys.path[0] + "/NTAPlib")
+from discoverLUN import discoverLUN
+
+snapomaticversion='dev'
+
+if len(sys.argv) > 1 and sys.argv[1] == '--debug':
+    debug=8
+else:
+    debug=0
+
+lunpaths={}
+mappers=os.listdir('/dev')
+for lun in mappers:
+    if len(lun) > 3 and lun[:3] == 'dm-':
+        out=discoverLUN('/dev/' + lun,debug=debug)
+        if out.go():
+            lunpaths[out.svm + ":" + out.lunpath] = '/dev/' + lun
+
+mappers=os.listdir('/dev/mapper')
+for lun in mappers:
+    out=discoverLUN('/dev/mapper/' + lun,debug=debug)
+    if out.go():
+        lunpaths[out.svm + ":" + out.lunpath] = '/dev/mapper/' + lun
+
+sortedpaths=list(lunpaths.keys())
+sortedpaths.sort()
+
+for lunpath in sortedpaths:
+    print(lunpath + " " + lunpaths[lunpath])
