@@ -9,23 +9,21 @@ import getopt
 sys.path.append(sys.path[0] + "/NTAPlib")
 from cloneVolumes import cloneVolumes
 from getVolumes import getVolumes
+from getCGs import getCGs
 import userio
 
 snapomaticversion='dev'
 
-knownmodes=['show','clone','restore']
-
-validoptions={'clone' : {'target':'str', \
+validoptions={'clone' : {'target':'multistr', \
                          'name':'str', \
                          'snapshot':'str', \
                          'split':'bool', \
                          'debug':'bool', \
                          'restdebug':'bool'}, \
-              'show' : {'target':'str', \
+              'show' : {'target':'multistr', \
+                        'cg':'bool', \
                         'debug':'bool', \
-                        'restdebug':'bool'},
-              'debug':'bool',
-              'restdebug':'bool'}
+                        'restdebug':'bool'}}
 
 requiredoptions={'clone':['target','name'], \
                  'show':['target']}
@@ -33,10 +31,12 @@ requiredoptions={'clone':['target','name'], \
 usage="Version " + snapomaticversion + "\n" + \
       "volume show\n" + \
       "          --target\n" + \
-      "          (syntax: svm:volume)\n\n" + \
+      "          (syntax: svm volume(s))\n\n" + \
+      "          --cg\n" + \
+      "          (restrict output to consistency group volumes)\n\n" + \
       "volume clone\n" + \
       "          --target\n" + \
-      "          (syntax: svm:volume)\n\n" + \
+      "          (svm volume)\n\n" + \
       "          --name\n" + \
       "          (name for the clone)\n\n" + \
       "          --snapshot\n" + \
@@ -48,67 +48,84 @@ usage="Version " + snapomaticversion + "\n" + \
       "          [--restdebug]\n" + \
       "          (show REST API calls and responses)\n\n"
 
-myoptions=userio.validateoptions(sys.argv,validoptions,modes=knownmodes,usage=usage,required=requiredoptions)
+myopts=userio.validateoptions('snapomatic.volume',sys.argv,validoptions,usage=usage,required=requiredoptions)
 
 try:
-    snapshot=myoptions['OPTS']['snapshot']
+    snapshot=myopts.snapshot
 except:
     snapshot=False
 try:
-    split=myoptions['OPTS']['split']
+    split=myopts.split
 except:
     split=False
 
 try:
-    name=myoptions['OPTS']['name']
+    name=myopts.name
 except:
     pass
 
 debug=0
-try:
-    if myoptions['OPTS']['debug']:
-        debug=debug+1
-except:
-    pass
-try:
-    if myoptions['OPTS']['restdebug']:
-        debug=debug+2
-except:
-    pass
+if myopts.debug:
+    debug=debug+1
 
-target=myoptions['OPTS']['target']
+if myopts.restdebug:
+    debug=debug+2
+
 try:
-    out=target.split(':')
-    svm=out[0]
-    targettype='VOL'
-    if len(out) == 1:
-        volumes='*'
-    elif len(out) == 2:
-        volumes=out[1]
-    else:
+    cg=myopts.cg
+except:
+    cg=False
+
+svm=myopts.target[0]
+if len(myopts.target) == 1:
+    volumes='*'
+else:
+    volumes=myopts.target[1:]
+
+if myopts.mode == 'clone':
+    if not len(myopts.target) == 2:
         userio.fail(usage)
-    if myoptions['MODE'] == 'clone':
-        if len(volumes.split(',')) > 1:
-            userio.fail(usage)
-        else:
-            volume=volumes
-except:
-    pass
+    else:
+        volume=myopts.target[1]
 
-if myoptions['MODE'] == 'show':
-    volumes=getVolumes(svm,volumes=volumes,debug=debug)
+if myopts.mode == 'show':
+    if cg:
+        volumes=getCGs(svm,volumes=volumes,debug=debug)
+    else:
+        volumes=getVolumes(svm,volumes=volumes,debug=debug)
     if not volumes.go():
         userio.message(volumes.reason)
         sys.exit(1)
     else:
-        grid=[['volume','size (GB)','aggregate','uuid']]
-        volumelist=list(volumes.volumes.keys())
-        volumelist.sort()
-        for volume in volumelist:
-            grid.append([volume,str(volumes.volumes[volume]['size']/1048576),volumes.volumes[volume]['aggrs'],volumes.volumes[volume]['uuid']])
+        if cg:
+            grid=[['cg','parent','volume','size (GB)','aggregate']]
+            cglist=list(volumes.cgs.keys())
+            cglist.sort()
+            for cg in cglist:
+                try:
+                    parentfield=volumes.cgs[cg]['parent']['name']
+                except:
+                    parentfield='-'
+                volumelist=list(volumes.cgs[cg]['volumes'].keys())
+                volumelist.sort()
+                for volume in volumelist:
+                    grid.append([cg,
+                                 parentfield,
+                                 volume,
+                                 str(volumes.volumes[volume]['size']/1048576),
+                                 volumes.volumes[volume]['aggrs'],
+                                 ])
+        else:
+            grid=[['volume','size (GB)','aggregate']]
+            volumelist=list(volumes.volumes.keys())
+            volumelist.sort()
+            for volume in volumelist:
+                grid.append([volume,
+                             str(volumes.volumes[volume]['size']/1048576),
+                             volumes.volumes[volume]['aggrs']])
         userio.grid(grid)
 
-elif myoptions['MODE'] == 'clone':
+elif myopts.mode == 'clone':
     if snapshot:
         clone=cloneVolumes(svm,(volume,name,snapshot),split=split,debug=debug)
     else:

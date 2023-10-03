@@ -23,7 +23,7 @@ validoptions['restore']={'name':'str','target':'str','cg':'bool', \
                          'debug':'bool', \
                          'restdebug':'bool'}
 
-validoptions['show']={'name':'str','prefix':'str','target':'str','cg':'bool', \
+validoptions['show']={'name':'str','prefix':'str','target':'str','cg':'str', \
                       'debug':'bool', \
                       'restdebug':'bool'}
 
@@ -43,7 +43,9 @@ usage="Version " + snapomaticversion + "\n" + \
       "        (name of target for snapshot operation)\n" + \
       "        [--name]\n" + \
       "        (filesystem, LUN target, or svm:volume)\n\n" + \
-      "        (Optional. Name for snapshot. Wildcards accepted)\n\n" + \
+      "        (Optional. Name for snapshot. Wildcards accepted.)\n\n" + \
+      "        [--cg]\n" + \
+      "        (Name of consistency group. Wildcards accepted.)\n\n" + \
       "        [--debug]\n" + \
       "        (show debug output)\n\n" + \
       "        [--restdebug]\n" + \
@@ -151,6 +153,11 @@ try:
 except:
     userio.fail("Cannot use snapshot wildcard without --force")
 
+try:
+    cg=myoptions['OPTS']['cg']
+except:
+    cg=False
+
 if myoptions['MODE'] == 'delete':
     if targettype=='VOL':
         snapshots=deleteSnapshots(svm,volumes,name,force=force,maxcount=maxcount,maxage=maxage,debug=debug)
@@ -188,7 +195,7 @@ elif myoptions['MODE'] == 'create':
 
 elif myoptions['MODE'] == 'show':
     if targettype=='VOL':
-        snapshots=getSnapshots(svm,volumes=volumes,name=name,debug=debug)
+        snapshots=getSnapshots(svm,volumes=volumes,cg=cg,name=name,debug=debug)
         if not snapshots.go():
             userio.message("ERROR: " + snapshots.reason)
             sys.exit(1)

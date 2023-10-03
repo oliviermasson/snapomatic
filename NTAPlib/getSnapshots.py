@@ -31,6 +31,7 @@ import datetime
 import re
 import sys
 import userio
+from getCGs import getCGs
 from getVolumes import getVolumes
 
 class getSnapshots:
@@ -42,17 +43,12 @@ class getSnapshots:
         self.stderr=[]
         self.svm=svm
         self.name=None
+        self.cg=False
         self.volumematch=[]
         self.volumes=[]
         self.snapshots={}
         self.debug=False
         
-        self.api='/storage/volumes/*/snapshots'
-        self.restargs='fields=uuid,' + \
-                 'name,' + \
-                 'create_time,' + \
-                 'snapmirror_label' + \
-                 '&svm.name=' + svm
 
         self.apibase=self.__class__.__name__
         if 'apicaller' in kwargs.keys():
@@ -60,7 +56,10 @@ class getSnapshots:
         else:
             self.apicaller=''
         localapi='->'.join([self.apicaller,self.apibase])
-        
+
+        if 'cg' in kwargs.keys():
+            self.cg=kwargs['cg']
+
         if 'volumes' in kwargs.keys():
             if type(kwargs['volumes']) is str:
                 self.volumematch=[kwargs['volumes']]
@@ -77,10 +76,6 @@ class getSnapshots:
 
         if 'name' in kwargs.keys() and kwargs['name'] is not None:
             self.name=kwargs['name']
-            if type(kwargs['name']) is str:
-                self.restargs=self.restargs + '&name='+ kwargs['name']                 
-            else:
-                self.restargs=self.restargs + '&name='+ '|'.join(kwargs['name'])               
 
         if 'debug' in kwargs.keys():
             self.debug=kwargs['debug']
@@ -97,6 +92,28 @@ class getSnapshots:
         if 'apicaller' in kwargs.keys():
             self.apicaller=kwargs['apicaller']
         localapi='->'.join([self.apicaller,self.apibase + ".go"])
+        
+        self.api='/storage/volumes/*/snapshots'
+        self.restargs='fields=uuid,' + \
+                      'name,' + \
+                      'create_time,' + \
+                      'snapmirror_label,' + \
+                      '&svm.name=' + self.svm
+
+
+        if self.name is not None:
+            if type(self.name) is str:
+                self.restargs=self.restargs + '&name='+ self.name                 
+            else:
+                self.restargs=self.restargs + '&name='+ '|'.join(self.name)               
+
+        print(self.cg)
+        if self.cg:
+            cgs=getCGs(self.svm,volumes=self.volumematch,apicaller=localapi,debug=self.debug)
+            cgs.go()
+
+        print(cgs.cgs)
+        sys.exit(0)
 
         if self.debug & 1:
             userio.message("Retriving volumes on " + self.svm,service=localapi + ":OP")
@@ -129,6 +146,7 @@ class getSnapshots:
                     uuid=record['uuid']
                     name=record['name']
                     volume=record['volume']['name']
+                    voluuid=record['volume']['uuid']
                     voluuid=record['volume']['uuid']
                     createtime=record['create_time']
                     if createtime[-3] == ':':

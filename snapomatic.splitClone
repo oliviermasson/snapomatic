@@ -12,39 +12,33 @@ import userio
 
 snapomaticversion='dev'
 
-validoptions={'svm':'str',
-              'volume':'str',
+validoptions={'target':'multistr',
               'debug':'bool',
               'restdebug':'bool'}
 
 requiredoptions=['svm','volume']
 
 usage="Version " + snapomaticversion + "\n" + \
-      "          --svm\n" + \
-      "          (name of target svm)\n\n" + \
-      "          --volume\n" + \
-      "          (name of the clone)\n\n" + \
+      "          --target\n" + \
+      "          (svm volume)\n\n" + \
       "          [--debug]\n" + \
       "          (show debug output)\n\n" + \
       "          [--restdebug]\n" + \
       "          (show REST API calls and responses)\n\n"
 
-myoptions=userio.validateoptions(sys.argv,validoptions,usage=usage,required=requiredoptions)
+myopts=userio.validateoptions(sys.argv,validoptions,usage=usage,required=requiredoptions)
 
-svm=myoptions['OPTS']['svm']
-volume=myoptions['OPTS']['volume']
+svm=myopts.target[0]
+if not len(myoptions.target == 2):
+    userio.fail(usage)
+else:
+    volume=myopts[1]
 
 debug=0
-try:
-    if myoptions['OPTS']['debug']:
+if myopts.debug:
         debug=debug+1
-except:
-    pass
-try:
-    if myoptions['OPTS']['restdebug']:
+if myopts.restdebug:
         debug=debug+2
-except:
-    pass
 
 split=splitClones(svm,volume,debug=debug)
 if not split.go():
