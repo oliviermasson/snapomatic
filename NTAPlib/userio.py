@@ -21,7 +21,17 @@ def randomtoken(*args):
     else:
         return(tokens)
 
-def validateoptions(program,sysargs,validoptions,**kwargs):
+
+def checkdate(field):
+    try:
+        timeformat='%Y-%m-%dT%H:%M:%S%z'
+        truevalue=datetime.datetime.strptime(field,timeformat).timestamp()
+        return(truevalue)
+    except:
+        msg = "Format for " + field + " does not match YYYY.MM.DDTHH:MM:SS[TZ]"
+        raise argparse.ArgumentTypeError(msg)
+
+def validateoptions(sysargs,validoptions,**kwargs):
     mode=None
     passedargs=[]
     usage="Error: Unable to process arguments"
@@ -32,7 +42,7 @@ def validateoptions(program,sysargs,validoptions,**kwargs):
     if len(sysargs) < 2:
         fail(usage)
 
-    parser=argparse.ArgumentParser(prog=program,description=usage,epilog='')
+    parser=argparse.ArgumentParser(prog=sys.argv[0],description=usage,epilog='')
 
     dicts=0
     nondicts=0
@@ -75,28 +85,25 @@ def validateoptions(program,sysargs,validoptions,**kwargs):
                                 action='store_true')
         elif validoptions[option] == 'int':
             parser.add_argument('--' + option, \
-                                nargs=1,
+                                nargs='?',
                                 type=int,
+                                default=None,
                                 required=requirement)
         elif validoptions[option] == 'str':
             parser.add_argument('--' + option, \
-                                nargs=1,
+                                nargs='?',
+                                default=None,
                                 required=requirement)
         elif validoptions[option] == 'multistr':
             parser.add_argument('--' + option, \
                                 nargs='+',
                                 required=requirement)
         elif validoptions[option] == 'timestamp':
-            try:
-                timeformat='%Y-%m-%dT%H:%M:%S%z'
-                truevalue=datetime.datetime.strptime(option,timeformat).timestamp()
-                parser.add_argument('--' + option, \
-                                    nargs=1,
-                                    required=requirement)
-
-            except:
-                fail(["Format for " + option + " does not match YYYY.MM.DDTHH:MM:SS[TZ]",
-                      "Example: May 1st 2019 at 1:35pm US Eastern Daylight Time is 2019-05-01T13:35:00-0400"])
+            parser.add_argument('--' + option, \
+                                 nargs='?',
+                                 default=None,
+                                 required=requirement,
+                                 type=checkdate)
 
     args=parser.parse_args()
     

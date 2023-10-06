@@ -44,6 +44,7 @@ class getSnapshots:
         self.svm=svm
         self.name=None
         self.cg=False
+        self.cgs={}
         self.volumematch=[]
         self.volumes=[]
         self.snapshots={}
@@ -93,12 +94,24 @@ class getSnapshots:
             self.apicaller=kwargs['apicaller']
         localapi='->'.join([self.apicaller,self.apibase + ".go"])
         
-        self.api='/storage/volumes/*/snapshots'
-        self.restargs='fields=uuid,' + \
-                      'name,' + \
-                      'create_time,' + \
-                      'snapmirror_label,' + \
-                      '&svm.name=' + self.svm
+        if self.cg:
+            self.api='/application/consistency-groups/{UUID}/snapshots'
+            self.restargs='fields=uuid,' + \
+                          'name,' + \
+                          'create_time,' + \
+                          'snapshot_volumes.volume.name,' + \
+                          'snapshot_volumes.volume.uuid,' + \
+                          'snapshot_volumes.snapshot.name,' + \
+                          'snapshot_volumes.snapshot.uuid,' + \
+                          'snapmirror_label,' + \
+                          '&svm.name=' + self.svm
+        else:
+            self.api='/storage/volumes/*/snapshots'
+            self.restargs='fields=uuid,' + \
+                          'name,' + \
+                          'create_time,' + \
+                          'snapmirror_label,' + \
+                          '&svm.name=' + self.svm
 
 
         if self.name is not None:
@@ -107,13 +120,76 @@ class getSnapshots:
             else:
                 self.restargs=self.restargs + '&name='+ '|'.join(self.name)               
 
-        print(self.cg)
         if self.cg:
+            if self.debug & 1:
+                userio.message("Retriving CG data on " + self.svm,service=localapi + ":OP")
+                userio.message("Volume search list: " + ','.join(self.volumematch),service=localapi + ":OP")
             cgs=getCGs(self.svm,volumes=self.volumematch,apicaller=localapi,debug=self.debug)
-            cgs.go()
+            if cgs.go():
+                self.cgs=cgs.cgs
+                for cgname in self.cgs.keys():
+                    if cgname not in self.snapshots.keys():
+                        self.snapshots[cgname]={}
+                    nextapi=self.api.replace('{UUID}',self.cgs[cgname]['uuid'])
+                    if self.debug & 1:
+                        userio.message("Retriving CG snapshots for CG " + cgname,service=localapi + ":OP")
+                    rest=doREST.doREST(self.svm,'get',nextapi,restargs=self.restargs,debug=self.debug)
+                    if rest.result == 0:
+                        for record in rest.response['records']:
+                            uuid=record['uuid']
+                            name=record['name']
+                            createtime=record['create_time']
+                            if createtime[-3] == ':':
+                                fmttime=createtime[:-3] + createtime[-2:]
+                            fmttime=fmttime.replace('T',' ',1)
+                            epoch=datetime.datetime.strptime(fmttime,'%Y-%m-%d %H:%M:%S%z').timestamp()
+                            for subrecord in record['snapshot_volumes']:
+                                volume=subrecord['volume']['name']
+                                voluuid=subrecord['volume']['uuid']
+                                snapname=subrecord['snapshot']['name']
+                                snapuuid=subrecord['snapshot']['uuid']
+                                if volume not in self.snapshots[cgname].keys():
+                                    self.snapshots[cgname][volume]={'snapshots':{},
+                                                                    'recent':{},
+                                                                    'uuid':voluuid}
+                                self.snapshots[cgname][volume]['snapshots'][snapname]={'createtime':createtime,
+                                                               'epoch':epoch,
+                                                               'date':fmttime,
+                                                               'uuid':snapuuid}
+                    else:
+                        self.result=1
+                        self.reason=rest.reason
+                        self.stdout=rest.stdout
+                        self.stderr=rest.stderr
+                        if self.debug & 4:
+                            self.showDebug()
+                        return(False)
 
-        print(cgs.cgs)
-        sys.exit(0)
+                for cgname in self.snapshots.keys():
+                    for volume in self.snapshots[cgname].keys():
+                        recent=0
+                        preordered=[]
+                        for name in self.snapshots[cgname][volume]['snapshots'].keys():
+                            if self.snapshots[cgname][volume]['snapshots'][name]['epoch'] > recent:
+                                preordered.append((name,self.snapshots[cgname][volume]['snapshots'][name]['epoch']))
+                                recent=self.snapshots[cgname][volume]['snapshots'][name]['epoch']
+                                self.snapshots[cgname][volume]['recent'] = name
+                        self.snapshots[cgname][volume]['ordered']=sorted(preordered, reverse=True, key=lambda x: int(x[1]))
+                        if self.debug & 1:
+                            snaplist=[['Name','Date']]
+                            for name,time in self.snapshots[cgname][volume]['ordered']:
+                                snaplist.append([name,self.snapshots[cgname][volume]['snapshots'][name]['date']])
+                            userio.grid(snaplist,service=localapi + ":DATA")
+                            userio.message("Total matches: " + str(len(snaplist)-1),service=localapi + ":DATA")
+            else:
+                self.result=1
+                self.reason=cgs.reason
+                self.stdout=cgs.stdout
+                self.stderr=cgs.stderr
+                if self.debug & 4:
+                    self.showDebug()
+                return(False)
+            return(True)
 
         if self.debug & 1:
             userio.message("Retriving volumes on " + self.svm,service=localapi + ":OP")
@@ -172,7 +248,6 @@ class getSnapshots:
                         snaplist.append([name,self.snapshots[volmatch]['snapshots'][name]['date']])
                     userio.grid(snaplist,service=localapi + ":DATA")
                     userio.message("Total matches: " + str(len(snaplist)-1),service=localapi + ":DATA")
-
             else:
                 self.result=1
                 self.reason=rest.reason
@@ -181,6 +256,8 @@ class getSnapshots:
                 if self.debug & 4:
                     self.showDebug()
                 return(False)
+
+
         self.result=0
         if self.debug & 4:
             self.showDebug()

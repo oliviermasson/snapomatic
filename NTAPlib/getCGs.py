@@ -87,7 +87,10 @@ class getCGs:
                 if 'parent_consistency_group' in record.keys():
                     self.cgs[cgname]['parent']={'name':record['parent_consistency_group']['name'],
                                                 'uuid':record['parent_consistency_group']['uuid']}
-            
+
+                    if self.cgs[cgname]['parent']['name'] not in self.cghierarchy.keys():
+                        self.cghierarchy[self.cgs[cgname]['parent']['name']]={'volumes':{},
+                                                                              'uuid':record['parent_consistency_group']['uuid']}
             for pattern in self.volumematch:
                 if pattern == '*':
                     rematch=re.compile('^.*.$')
@@ -121,16 +124,14 @@ class getCGs:
             
             singlecgs=list(self.cgs.keys())
             for cg in singlecgs:
-                if self.cgs[cg]['parent']['name'] not in self.cghierarchy.keys():
-                    self.cghierarchy[self.cgs[cg]['parent']['name']]=[cg]
-                else:
-                    self.cghierarchy[self.cgs[cg]['parent']['name']].append(cg)
-
+                for volume in self.cgs[cg]['volumes'].keys():
+                    if 'parent' in self.cgs[cg].keys():
+                        self.cghierarchy[self.cgs[cg]['parent']['name']]['volumes'][volume]=self.cgs[cg]['volumes'][volume]
 
             mastervolumelist=[]
             for cg in self.cgs.keys():
                 mastervolumelist = mastervolumelist + list(self.cgs[cg]['volumes'].keys())
-            
+
             volumes=getVolumes(self.svm,volumes=mastervolumelist,debug=self.debug,apicaller=localapi)
             if not volumes.go():
                 self.result=1

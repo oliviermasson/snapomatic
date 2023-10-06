@@ -48,7 +48,7 @@ usage="Version " + snapomaticversion + "\n" + \
       "          [--restdebug]\n" + \
       "          (show REST API calls and responses)\n\n"
 
-myopts=userio.validateoptions('snapomatic.volume',sys.argv,validoptions,usage=usage,required=requiredoptions)
+myopts=userio.validateoptions(sys.argv,validoptions,usage=usage,required=requiredoptions)
 
 try:
     snapshot=myopts.snapshot
@@ -98,7 +98,7 @@ if myopts.mode == 'show':
         sys.exit(1)
     else:
         if cg:
-            grid=[['cg','parent','volume','size (GB)','aggregate']]
+            grid=[['CG','Parent','Volume','Size (GB)','Aggregate']]
             cglist=list(volumes.cgs.keys())
             cglist.sort()
             for cg in cglist:
@@ -116,7 +116,7 @@ if myopts.mode == 'show':
                                  volumes.volumes[volume]['aggrs'],
                                  ])
         else:
-            grid=[['volume','size (GB)','aggregate']]
+            grid=[['Volume','Size (GB)','Aggregate']]
             volumelist=list(volumes.volumes.keys())
             volumelist.sort()
             for volume in volumelist:

@@ -27,7 +27,7 @@ usage="Version " + snapomaticversion + "\n" + \
       "          [--restdebug]\n" + \
       "          (show REST API calls and responses)\n\n"
 
-myopts=userio.validateoptions('snapomatic.destroyVolume', sys.argv,validoptions,usage=usage,required=requiredoptions)
+myopts=userio.validateoptions(sys.argv,validoptions,usage=usage,required=requiredoptions)
 
 debug=0
 

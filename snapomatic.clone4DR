@@ -17,7 +17,7 @@ import getopt
 
 snapomaticversion='DEV'
 
-validoptions={'target':'str',
+validoptions={'target':'multistr',
               'dbfsuffix':'str',
               'logsuffix':'str',
               'igrouptoken':'int',
@@ -54,66 +54,45 @@ usage="Version " + snapomaticversion + "\n" + \
       "          [--restdebug]\n" + \
       "          (show REST API calls and responses)\n\n" 
 
-myoptions=userio.validateoptions(sys.argv,validoptions,usage=usage,required=requiredoptions)
+myopts=userio.validateoptions(sys.argv,validoptions,usage=usage,required=requiredoptions)
 
-target=myoptions['OPTS']['target']
-try:
-    svm,volumes=target.split(':')
-    if ',' in volumes:
-        volumes=volumes.split(',')
-    else:
-        volumes=[volumes]
-    targettype='VOL'
-except:
-    svm=target
+svm=myopts.target[0]
+if len(myopts.target) == 1:
     volumes='*'
+else:
+    volumes=myopts.target[1:]
 
-dbfpattern=myoptions['OPTS']['dbfsuffix']
+dbfpattern=myopts.dbfsuffix
 if not dbfpattern[1] == '_':
     dbfpattern='_' + dbfpattern
-logpattern=myoptions['OPTS']['logsuffix']
+logpattern=myopts.logsuffix
 if not logpattern[1] == '_':
     logpattern='_' + logpattern
-igrouptoken=myoptions['OPTS']['igrouptoken']
+igrouptoken=myopts.igrouptoken
+
 try:
-    recoverytarget=myoptions['OPTS']['recoverypoint']
+    recoverytarget=myopts.recoverypoint
 except:
     recoverytarget=False
 
-prefix=myoptions['OPTS']['prefix']
+prefix=myopts.prefix
 
-try:
-    splitclones=myoptions['OPTS']['split']
-except:
-    splitclones=False
+splitclones=myopts.split
 
 debug=0
+if myopts.debug:
+    debug=debug+1
 
-try:
-    if myoptions['OPTS']['debug']:
-        debug=debug+1
-except:
-    pass
+if myopts.restdebug:
+    debug=debug+2
 
-try:
-    if myoptions['OPTS']['restdebug']:
-        debug=debug+2
-except:
-    pass
+igroupname=myopts.igroupname
 
-try:
-    igroupname=myoptions['OPTS']['igroupname']
-except:
-    igroupname=False
-
-try:
-    nosleep=myoptions['OPTS']['nosleep']
-except:
-    nosleep=False
+nosleep=myopts.nosleep
 
 snapmirror=getSnapmirror(svm,volumes=volumes,debug=debug)
 if not snapmirror.go():
-    snapmirror.debug()
+    snapmirror.showDebug()
 if len(snapmirror.snapmirrorDestinations.keys()) < 1:
     userio.fail("No matching snapmirrored volumes detected")
 

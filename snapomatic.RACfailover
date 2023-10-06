@@ -39,8 +39,8 @@ usage="Version " + snapomaticversion + "\n" + \
       "            --noasmlib\n" + \
       "           (Bypass ASMlib scanning)\n"
 
-myoptions=userio.validateoptions(sys.argv,validoptions,usage=usage,required=requiredoptions)
-volpattern=myoptions['OPTS']['volpattern']
+myopts=userio.validateoptions(sys.argv,validoptions,usage=usage,required=requiredoptions)
+volpattern=myopts.volpattern
 
 localhost=platform.node().split('.', 1)[0]
 
@@ -52,35 +52,17 @@ else:
     print("WARNING: No wildcard detected in --volpattern")
     volpatternmatch=re.compile('^' + volpattern + '$')
 
-try:
-    debug=myoptions['OPTS']['debug']
-    if debug:
-        debug=25
-except:
-    debug=0
+debug=0
+if myopts.debug:
+    debug=25
+
+noscan=myopts.noscan
+noasmlib=myopts.noasmlib
+noafd=myopts.noafd
+scaniscsi=myopts.iscsi
 
 try:
-    noscan=myoptions['OPTS']['noscan']
-except:
-    noscan=False
-
-try:
-    noasmlib=myoptions['OPTS']['noasmlib']
-except:
-    noasmlib=False
-
-try:
-    noafd=myoptions['OPTS']['noafd']
-except:
-    noafd=False
-
-try:
-    scaniscsi=myoptions['OPTS']['iscsi']
-except:
-    scaniscsi=False
-
-try:
-    recoverypoint=myoptions['OPTS']['recoverypoint']
+    recoverypoint=myopts.recoverypoint
     rmanrecoverysecs=recoverypoint+time.localtime().tm_gmtoff
     rmanrecoverypoint=time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(rmanrecoverysecs))
 except:
