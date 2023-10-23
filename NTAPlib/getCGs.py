@@ -15,7 +15,7 @@ class getCGs:
         self.volumematch=[]
         self.volumes={}
         self.cgs={}
-        self.cghierarchy={}
+        self.name=[]
         self.debug=False
         
         self.api='/application/consistency-groups'
@@ -45,14 +45,22 @@ class getCGs:
                     self.volumematch.append(item)
         else:
             self.volumematch='*'
+        
+        if 'name' in kwargs.keys():
+            if type(kwargs['name']) is str:
+                self.volumematch=kwargs['name'].split(',')
+            else:
+                try:
+                    newlist=list(kwargs['name'])
+                except:
+                    print("Error: 'name' passed to getCGs with illegal type")
+                    sys.exit(1)
+                for item in newlist:
+                    self.name.append(item)
+        else:
+            self.name=['*']
 
         self.restargs=self.restargs + "&svm.name=" + svm
-
-        if 'cache' in kwargs.keys():
-            self.cache=True
-            store=kwargs['cache']
-        else:
-            self.cache=False
 
         if 'debug' in kwargs.keys():
             self.debug=kwargs['debug']
@@ -80,17 +88,52 @@ class getCGs:
                     sys.exit(1)
                 if self.debug & 1:
                     userio.message("Found CG " + cgname + " with uuid " + cguuid,service=localapi + ":OP")
+                self.cgs[cgname]={'uuid':cguuid,'volumes':[],'parent':None,'children':[]}
                 if 'volumes' in record.keys():
-                    self.cgs[cgname]={'uuid':cguuid,'volumes':{},'parent':None}
                     for volume in record['volumes']:
-                        self.cgs[cgname]['volumes'][volume['name']]={'uuid':volume['uuid']}
+                        self.cgs[cgname]['volumes'].append(volume['name'])
                 if 'parent_consistency_group' in record.keys():
-                    self.cgs[cgname]['parent']={'name':record['parent_consistency_group']['name'],
-                                                'uuid':record['parent_consistency_group']['uuid']}
+                    if self.debug & 1:
+                        userio.message("CG " + cgname + " has parent CG of " + record['parent_consistency_group']['name'],service=localapi + ":OP")
+                    self.cgs[cgname]['parent']=record['parent_consistency_group']['name']
 
-                    if self.cgs[cgname]['parent']['name'] not in self.cghierarchy.keys():
-                        self.cghierarchy[self.cgs[cgname]['parent']['name']]={'volumes':{},
-                                                                              'uuid':record['parent_consistency_group']['uuid']}
+            for cg in self.cgs.keys():
+                if self.cgs[cg]['parent'] is not None:
+                    self.cgs[self.cgs[cg]['parent']]['volumes']=self.cgs[self.cgs[cg]['parent']]['volumes'] + self.cgs[cg]['volumes']
+                    if self.cgs[cg]['parent'] in self.cgs.keys() and cg not in self.cgs[self.cgs[cg]['parent']]['children']:
+                        self.cgs[self.cgs[cg]['parent']]['children'].append(cg)
+            
+            cgmatches=[]
+            for pattern in self.name:
+                if pattern == '*':
+                    rematch=re.compile('^.*.$')
+                elif re.findall(r'[?*.^$]',pattern):
+                    try:
+                        rematch=re.compile(pattern)
+                    except:
+                        self.result=1
+                        self.reason="Illegal volume pattern match"
+                        return(False)
+                else:
+                    rematch=re.compile('^' + pattern + '$')
+
+                cgnames=self.cgs.keys()
+                for cgitem in cgnames:
+                    cgmatch=False
+                    for cgitem in self.cgs.keys():
+                        if re.match(rematch,cgitem):
+                            cgmatch=True
+                            if self.debug & 1:
+                                userio.message("CG " + cgitem + " matches " + pattern,service=localapi + ":OP")
+                            cgmatches.append(cgitem)
+            
+            nomatches=list(set(list(self.cgs.keys())) - set(cgmatches))
+            for item in nomatches:
+                if self.debug & 1:
+                    userio.message("CG " + item + " does not match any cg pattern ",service=localapi + ":OP")
+                del self.cgs[item]
+
+            cgmatches=[]
             for pattern in self.volumematch:
                 if pattern == '*':
                     rematch=re.compile('^.*.$')
@@ -104,11 +147,10 @@ class getCGs:
                 else:
                     rematch=re.compile('^' + pattern + '$')
 
-                cgmatches=[]
                 cgnames=self.cgs.keys()
                 for item in cgnames:
                     cgmatch=False
-                    for volitem in self.cgs[item]['volumes'].keys():
+                    for volitem in self.cgs[item]['volumes']:
                         if re.match(rematch,volitem):
                             cgmatch=True
                             if self.debug & 1:
@@ -119,47 +161,31 @@ class getCGs:
             nomatches=list(set(list(self.cgs.keys())) - set(cgmatches))
             for item in nomatches:
                 if self.debug & 1:
-                    userio.message("CG " + item + " has no constituent that matches " + pattern,service=localapi + ":OP")
+                    userio.message("CG " + item + " does not match any volume pattern",service=localapi + ":OP")
                 del self.cgs[item]
             
-            singlecgs=list(self.cgs.keys())
-            for cg in singlecgs:
-                for volume in self.cgs[cg]['volumes'].keys():
-                    if 'parent' in self.cgs[cg].keys():
-                        self.cghierarchy[self.cgs[cg]['parent']['name']]['volumes'][volume]=self.cgs[cg]['volumes'][volume]
-
             mastervolumelist=[]
             for cg in self.cgs.keys():
-                mastervolumelist = mastervolumelist + list(self.cgs[cg]['volumes'].keys())
+                mastervolumelist = mastervolumelist + self.cgs[cg]['volumes']
 
-            volumes=getVolumes(self.svm,volumes=mastervolumelist,debug=self.debug,apicaller=localapi)
-            if not volumes.go():
-                self.result=1
-                self.reason=volumes.reason
-                if self.debug & 1:
-                    self.showDebug()
-                return(False)
-            else:
-                self.volumes=volumes.volumes
+            if len(self.cgs) > 0:
+                volumes=getVolumes(self.svm,volumes=mastervolumelist,debug=self.debug,apicaller=localapi)
+                if not volumes.go():
+                    self.result=1
+                    self.reason=volumes.reason
+                    if self.debug & 1:
+                        self.showDebug()
+                    return(False)
+                else:
+                    self.volumes=volumes.volumes
 
             self.result=0
             return(True)
-
 
         else:
             self.result=1
             self.reason=rest.reason
-            return(False)
-
-
-        if self.result == 1:
-            self.result=1
             if self.debug & 1:
                 self.showDebug()
             return(False)
-        else:
-            self.result=0
-            if self.debug & 1:
-                self.showDebug()
-            return(True)
 

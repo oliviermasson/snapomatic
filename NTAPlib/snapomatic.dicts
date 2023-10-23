@@ -1,0 +1,24 @@
+<volumes>
+    {VOLUME NAME: {size,
+                   aggrs,
+                   type,
+                   junction-path,
+                   svm:{name, uuid}}}
+
+<snapshots> (normal)
+    {VOLUME NAME: {uuid,
+                   snapshots: {SNAPSHOT NAME: {uuid,
+                                               date,
+                                               epoch}}}}
+
+<snapshots> (cg)
+    {CG NAME: {
+        'uuid'
+        'snapshots': {SNAPSHOT NAME: {uuid,date,epoch,volumes:[NAMES]},
+
+<cgs>
+    {CG NAME: {
+        'uuid',
+        'parent',
+        'volumes': [NAMES],
+        'children': [NAMES]

@@ -8,7 +8,6 @@ import os
 import getopt
 sys.path.append(sys.path[0] + "/NTAPlib")
 from cloneVolumes import cloneVolumes
-from getVolumes import getVolumes
 from getCGs import getCGs
 import userio
 
@@ -29,14 +28,12 @@ requiredoptions={'clone':['target','name'], \
                  'show':['target']}
 
 usage="Version " + snapomaticversion + "\n" + \
-      "volume show\n" + \
+      "cg show\n" + \
       "          --target\n" + \
-      "          (syntax: svm volume(s))\n\n" + \
-      "          --cg\n" + \
-      "          (restrict output to consistency group volumes)\n\n" + \
-      "volume clone\n" + \
+      "          (syntax: svm cg(s))\n\n" + \
+      "cg clone\n" + \
       "          --target\n" + \
-      "          (svm volume)\n\n" + \
+      "          (svm )\n\n" + \
       "          --name\n" + \
       "          (name for the clone)\n\n" + \
       "          --snapshot\n" + \
@@ -78,51 +75,44 @@ except:
 
 svm=myopts.target[0]
 if len(myopts.target) == 1:
-    volumes='*'
+    cgs='*'
 else:
-    volumes=myopts.target[1:]
+    cgs=myopts.target[1:]
 
 if myopts.mode == 'clone':
     if not len(myopts.target) == 2:
         userio.fail(usage)
     else:
-        volume=myopts.target[1]
+        cgs=myopts.target[1]
 
 if myopts.mode == 'show':
-    if cg:
-        volumes=getCGs(svm,volumes=volumes,debug=debug)
-    else:
-        volumes=getVolumes(svm,volumes=volumes,debug=debug)
-    if not volumes.go():
-        userio.message(volumes.reason)
+    knowncgs=getCGs(svm,name=cgs,debug=debug)
+    if not knowncgs.go():
+        userio.message(knowncgs.reason)
         sys.exit(1)
     else:
-        if cg:
-            grid=[['CG','Parent','Volume','Size (GB)','Aggregate']]
-            cglist=list(volumes.cgs.keys())
-            cglist.sort()
-            for cg in cglist:
-                try:
-                    parentfield=volumes.cgs[cg]['parent']
-                except:
-                    parentfield='-'
-                volumelist=volumes.cgs[cg]['volumes']
-                volumelist.sort()
-                for volume in volumelist:
-                    grid.append([cg,
-                                 parentfield,
-                                 volume,
-                                 str(volumes.volumes[volume]['size']/1048576),
-                                 volumes.volumes[volume]['aggrs'],
-                                 ])
-        else:
-            grid=[['Volume','Size (GB)','Aggregate']]
-            volumelist=list(volumes.volumes.keys())
+        grid=[['CG','Parent','Children','Volume','Size (GB)','Aggregate']]
+        cglist=list(knowncgs.cgs.keys())
+        cglist.sort()
+        for cg in cglist:
+            try:
+                parentfield=knowncgs.cgs[cg]['parent']
+            except:
+                parentfield='-'
+            try:
+                childrenfield=join(','),knowncgs.cgs[cg]['children']
+            except:
+                childrenfield='-'
+            volumelist=knowncgs.cgs[cg]['volumes']
             volumelist.sort()
             for volume in volumelist:
-                grid.append([volume,
-                             str(volumes.volumes[volume]['size']/1048576),
-                             volumes.volumes[volume]['aggrs']])
+                grid.append([cg,
+                             parentfield,
+                             childrenfield,
+                             volume,
+                             str(knowncgs.volumes[volume]['size']/1048576),
+                             knowncgs.volumes[volume]['aggrs'],
+                             ])
         userio.grid(grid)
 
 elif myopts.mode == 'clone':
