@@ -30,6 +30,8 @@ import userio
 import subprocess
 import random
 
+supportedNFS=['nfs','nfs4']
+
 if os.name == 'posix':
     import pwd
     import grp
@@ -243,3 +245,23 @@ def setownership(path, **kwargs):
         return(True)
     except:
         return(False)
+
+def getFilesystems(paths):
+    known={}
+    unknown=[]
+    mountpoint2device={}
+    allmounts=open('/proc/mounts','r').readlines()
+    for item in allmounts:
+        device,mountpoint,fstype=item.split(' ')[:3]
+        if fstype in supportedNFS:
+            device=tuple(device.split(':'))
+        mountpoint2device[mountpoint]={'device':device,'fstype':fstype,'mountpoint':mountpoint}
+    for item in paths:
+        realpath=os.path.realpath(item)
+        if not os.path.exists(realpath):
+            userio.fail("Nonexistent path passed to getFilesystems")
+        else:
+            while not os.path.ismount(realpath):
+                realpath=os.path.dirname(realpath)
+            known[item]=mountpoint2device[realpath]
+    return(known)

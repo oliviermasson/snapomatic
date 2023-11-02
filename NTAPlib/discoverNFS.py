@@ -1,12 +1,7 @@
 import os
 import doREST
-
-# NFS
-#    FILESYSTEM name is key
-#       SVM
-#       VOLUME
-#       VOLUME UUID
-#       JUNCTION-PATH
+import fileio
+import userio
 
 class discoverNFS:
 
@@ -16,89 +11,91 @@ class discoverNFS:
         self.stdout=None
         self.stderr=None   
         self.paths=path
-        self.exports={}
         self.nfs={}
-        self.cache=None
+        self.svms={}
+        self.unknown=[]
+        self.supportedNFS=['nfs','nfs4']
+        self.debug=False
 
         nasprotocols=['nfs','nfs4']
 
-        if 'cache' in kwargs:
-            store=kwargs['cache']
-
-
         if type(path) is str:
             self.paths=[path]
+        elif type(path) is list:
+            self.paths=path
+
+        self.apibase=self.__class__.__name__
+        if 'apicaller' in kwargs.keys():
+            self.apicaller=kwargs['apicaller']
+        else:
+            self.apicaller=''
+        localapi='->'.join([self.apicaller,self.apibase])
+
+        if 'debug' in kwargs.keys():
+            self.debug=kwargs['debug']
+
+        if self.debug & 1:
+            userio.message('',service=localapi + ":INIT")
+
+    def go(self,**kwargs):
 
         for item in self.paths:
-            if not os.path.exists(item):
-                self.result=1
-                self.reason="Path " + item + " does not exist"
-                return
             if not item[0] == '/':
                 self.result=1
                 self.reason="Only absolute paths supported"
-                return
-        
-        allmounts=open('/proc/mounts','r').readlines()
-        mountpoint2server={}
-        for item in allmounts:
-            source,mountpoint,fstype=item.split(' ')[:3]    
-            if fstype in nasprotocols :
-                mountpoint2server[mountpoint]=source
+                return(False)
 
         nfsservers={}
-        for item in self.paths:
-            realpath=os.path.realpath(item)
-            if not os.path.exists(realpath):
-                self.result=1
-                self.reason="Cannot get canonical path for " + item
-                self.nfs=None
-                return
-            while not os.path.ismount(realpath):
-                realpath=os.path.dirname(realpath)
-            self.nfs[item]={'MOUNTPOINT':realpath}
-
-            try:
-                server,junction=mountpoint2server[realpath].split(':')
-                self.nfs[item]['JUNCTIONPATH']=junction
-                self.nfs[item]['SERVERNAME']=server
-                if server in nfsservers.keys():
-                    nfsservers[server].append(junction)
+        fsinfo=fileio.getFilesystems(self.paths)
+        for path in fsinfo.keys():
+            if fsinfo[path]['fstype'] in self.supportedNFS:
+                device,exportpath=fsinfo[path]['device']
+                if device not in nfsservers.keys():
+                    nfsservers[device]=[exportpath]
                 else:
-                    nfsservers[server]=[junction]
+                    nfsservers[device].append(exportpath)
 
-            except Exception as e:
-                self.result=1
-                self.reason=e
-                return
+        for item in nfsservers.keys():
+            nfsservers[item]=set(nfsservers[item])
 
         restresponses={}
-        for item in nfsservers.keys():
+        for device in nfsservers.keys():
             api='/storage/volumes'
-            restargs='fields=uuid,svm.name?nas.path=' + '|'.join(nfsservers[item])
-            rest=doREST.doREST(item,'get',api,restargs,**kwargs)
+            restargs='fields=size,uuid,aggregates,type,svm.name,svm.uuid,nas.path&nas.path=' + '|'.join(nfsservers[device])
+            rest=doREST.doREST(device,'get',api,restargs=restargs,debug=self.debug)
             if rest.result == 0:
-                restresponses[item]=rest.response
+                restresponses[device]=rest.response
             else:
                 self.result=1
                 self.reason=rest.reason
                 return
 
-        known={}
         for servername in restresponses.keys():
             for record in restresponses[servername]['records']:
                 svm=record['svm']['name']
+                svmuuid=record['svm']['uuid']
+                size=record['size']
+                aggrs=record['aggregates']
                 voluuid=record['uuid']
                 volname=record['name']
                 junctionpath=record['nas']['path']
-                known[(servername,junctionpath)]={'SVM':svm,'VOLUUID':voluuid,'VOLNAME':volname}
+                if svm not in self.svms.keys():
+                    self.svms[svm]={'uuid':record['svm']['uuid'],'volumes':{}}
+                self.svms[svm]['volumes'][volname]={'uuid':voluuid,
+                                                    'size':size,
+                                                    'name':volname,
+                                                    'aggrs':aggrs,
+                                                    'svm':{'name':svm,'uuid':svmuuid},
+                                                    'junction-path':junctionpath}
 
-                if cache:
-                    if svm not in store.svm.keys():
-                        store.svm[svm]
+                for path in fsinfo.keys():
+                    if fsinfo[path]['device'] == (servername, junctionpath):
+                        self.nfs[(servername,junctionpath)] = {'volumes':self.svms[svm]['volumes'][volname]}
+                        break
 
+        for path in self.paths:
+            if path not in self.nfs.keys():
+                self.unknown.append(path)
 
-        
-        for item in self.nfs.keys():
-            self.nfs[item]=known[(self.nfs[item]['SERVERNAME'],self.nfs[item]['JUNCTIONPATH'])]
-
+        self.result=0
+        return(True)

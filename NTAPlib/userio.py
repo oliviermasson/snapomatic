@@ -59,6 +59,9 @@ def validateoptions(sysargs,validoptions,**kwargs):
         modal=False
     else:
         fail("Corrupt validoptions dictionary passed")
+    
+    if not modal and 'acceptpaths' in kwargs.keys() and kwargs['acceptpaths']:
+        parser.add_argument('paths',nargs='+',default=None)
 
     if 'required' in kwargs.keys():
         if modal:
@@ -79,6 +82,8 @@ def validateoptions(sysargs,validoptions,**kwargs):
                 requirement=True
             else:
                 requirement=False
+        else:
+            requirement=False
         if validoptions[option] == 'bool':
             parser.add_argument('--' + option, \
                                 required=requirement, \

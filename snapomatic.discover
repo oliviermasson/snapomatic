@@ -1,0 +1,76 @@
+#! /usr/bin/python3
+import sys
+pythonversion=sys.version_info
+if pythonversion[0] != 3 or pythonversion[1] < 6:
+    print("This script requires Python 3.6 or higher")
+    sys.exit(1)
+import os
+sys.path.append(sys.path[0] + "/NTAPlib")
+import discoverPaths
+import userio
+
+snapomaticversion='dev'
+
+validoptions={'debug':'bool', \
+              'restdebug':'bool'}
+
+usage="Version " + snapomaticversion + "\n" + \
+      "discover [filesystem or LUN]\n" + \
+      "        [--debug]\n" + \
+      "        (show debug output)\n\n"
+
+myopts=userio.validateoptions(sys.argv,validoptions,acceptpaths=True,usage=usage)
+
+debug=0
+if myopts.debug:
+    debug=debug+1
+if myopts.restdebug:
+    debug=debug+2
+
+mypaths=discoverPaths.discoverPaths(myopts.paths,debug=debug)
+mypaths.go()
+
+paths=list(mypaths.paths.keys())
+paths.sort()
+pathgrid=[['path','mountpoint','fs','vg','lv','pv','SVM','export','volume','lun']]
+for path in paths:
+    if mypaths.paths[path]['fstype'] in ['xfs']:
+        pvs=list(mypaths.vgs[mypaths.paths[path]['device'][0]]['pvs'].keys())
+        pathgrid.append([path,
+                         mypaths.paths[path]['mountpoint'],
+                         mypaths.paths[path]['fstype'],
+                         mypaths.paths[path]['device'][0],
+                         mypaths.paths[path]['device'][1],
+                         pvs[0],
+                         mypaths.luns[pvs[0]].svm['name'],
+                         '',
+                         mypaths.luns[pvs[0]].volume,
+                         mypaths.luns[pvs[0]].path.split('/')[-1]])
+        for x in range(1,len(pvs)):
+            pathgrid.append(['','','','','',
+                             pvs[x],
+                             mypaths.luns[pvs[x]].svm['name'],
+                             '',
+                             mypaths.luns[pvs[0]].volume,
+                             mypaths.luns[pvs[0]].path.split('/')[-1],
+                             '',''])
+    elif mypaths.paths[path]['fstype'] in ['nfs','nfs4']:
+        pathgrid.append([path,
+                         mypaths.paths[path]['mountpoint'],
+                         mypaths.paths[path]['fstype'],
+                         '','','',
+                         mypaths.nfs[mypaths.paths[path]['device']]['volumes']['svm']['name'],
+                         mypaths.nfs[mypaths.paths[path]['device']]['volumes']['junction-path'],
+                         mypaths.nfs[mypaths.paths[path]['device']]['volumes']['name'],
+                         ''])
+    
+if len(mypaths.unknown) > 0:
+    for item in mypaths.unknown:
+        pathgrid.append([item,'?','?','?','?','?','?','?','?','?'])  
+
+userio.grid(pathgrid)
+
+        
+                 
+
+    
