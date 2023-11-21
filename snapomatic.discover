@@ -51,8 +51,8 @@ for path in paths:
                              pvs[x],
                              mypaths.luns[pvs[x]].svm['name'],
                              '',
-                             mypaths.luns[pvs[0]].volume,
-                             mypaths.luns[pvs[0]].path.split('/')[-1],
+                             mypaths.luns[pvs[x]].volume,
+                             mypaths.luns[pvs[x]].path.split('/')[-1],
                              '',''])
     elif mypaths.paths[path]['fstype'] in ['nfs','nfs4']:
         pathgrid.append([path,
@@ -63,6 +63,15 @@ for path in paths:
                          mypaths.nfs[mypaths.paths[path]['device']]['volumes']['junction-path'],
                          mypaths.nfs[mypaths.paths[path]['device']]['volumes']['name'],
                          ''])
+    elif mypaths.paths[path]['fstype'] == 'block':
+        pathgrid.append([path,
+                         '',
+                         mypaths.paths[path]['fstype'],
+                         '','','',
+                         mypaths.luns[mypaths.paths[path]['device']].svm['name'],
+                         '',
+                         mypaths.luns[mypaths.paths[path]['device']].volume,
+                         mypaths.luns[mypaths.paths[path]['device']].path.split('/')[-1]])
     
 if len(mypaths.unknown) > 0:
     for item in mypaths.unknown:
