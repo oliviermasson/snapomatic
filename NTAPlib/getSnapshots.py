@@ -1,4 +1,3 @@
-#
 # CAUTION: if a name pattern match used, all snapshot operations are filted
 #          for that pattern, including the recent snapshot
 #
@@ -47,7 +46,6 @@ class getSnapshots:
         self.volumes=[]
         self.snapshots={}
         self.debug=False
-        
 
         self.apibase=self.__class__.__name__
         if 'apicaller' in kwargs.keys():
@@ -130,9 +128,8 @@ class getSnapshots:
 
         if self.debug & 1:
             userio.message("Retriving CG data on " + self.svm,service=localapi + ":OP")
-            userio.message("Volume search list: " + ','.join(self.volumes),service=localapi + ":OP")
-
         cgs=getCGs(self.svm,volumes=self.volumes,apicaller=localapi,debug=self.debug)
+
         if cgs.go():
             self.cgs=cgs.cgs
             cgsnaps=[]

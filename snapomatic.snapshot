@@ -9,6 +9,7 @@ from getSnapshots import getSnapshots
 from getCGSnapshots import getCGSnapshots
 from createSnapshots import createSnapshots
 from createCGSnapshots import createCGSnapshots
+from deleteCGSnapshots import deleteCGSnapshots
 from deleteSnapshots import deleteSnapshots
 import userio
 
@@ -131,23 +132,43 @@ cg=myopts.cg
 
 if myopts.mode == 'delete':
     if len(voltargets) > 0:
-        snapshots=deleteSnapshots(svm,voltargets,name,cg=cg,force=force,maxcount=maxcount,maxage=maxage,debug=debug)
+        if cg:
+            snapshots=deleteCGSnapshots(svm,voltargets,name,force=force,maxcount=maxcount,maxage=maxage,debug=debug)
+            grid=[['CG','Volume','Snapshot','Status']]
+        else:
+            snapshots=deleteSnapshots(svm,voltargets,name,force=force,maxcount=maxcount,maxage=maxage,debug=debug)
+            grid=[['Volume','Snapshot','Status']]
         if not snapshots.go():
             userio.message("ERROR: " + snapshots.reason)
         else:
             userio.message("Success")
-        grid=[['Volume','Snapshot','Status']]
-        deletedvols=list(snapshots.deleted.keys())
-        deletedvols.sort()
-        for volume in deletedvols:
-            for snap in snapshots.deleted[volume]:
-                grid.append([volume,snap,'Deleted'])
+        deleted=list(snapshots.deleted.keys())
+        deleted.sort()
+        if cg:
+            for cg in deleted:
+                deletedvols=list(snapshots.deleted[cg])
+                deletedvols.sort()
+                for volume in deletedvols:
+                    for snap in snapshots.deleted[cg][volume]:
+                        grid.append([cg,volume,snap,'Deleted'])
+        else:
+            for volume in deleted:
+                for snap in snapshots.deleted[volume]:
+                    grid.append([volume,snap,'Deleted'])
         failed2delete=list(snapshots.failed.keys())
         failed2delete.sort()
-        for volume in failed2delete:
-            for snap in snapshots.failed[volume]:
-                grid.append([volume,snap,'FAIL'])
-        if len(failed2delete) > 0 or len(deletedvols) > 0:
+        if cg:
+            for cg in failed2delete:
+                deletedvols=list(snapshots.deleted[cg])
+                deletedvols.sort()
+                for volume in deletedvols:
+                    for snap in snapshots.failed[volume]:
+                        grid.append([volume,snap,'FAIL'])
+        else:
+            for volume in failed2delete:
+                for snap in snapshots.failed[volume]:
+                    grid.append([volume,snap,'FAIL'])
+        if len(failed2delete) > 0 or len(deleted) > 0:
             userio.grid(grid)
 
 elif myopts.mode == 'create':

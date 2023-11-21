@@ -48,7 +48,7 @@ class getCGs:
         
         if 'name' in kwargs.keys():
             if type(kwargs['name']) is str:
-                self.volumematch=kwargs['name'].split(',')
+                self.name=kwargs['name'].split(',')
             else:
                 try:
                     newlist=list(kwargs['name'])

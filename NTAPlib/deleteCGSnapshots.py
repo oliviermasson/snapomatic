@@ -4,17 +4,18 @@ import time
 import re
 import sys
 import userio
-from getSnapshots import getSnapshots
+from getCGSnapshots import getCGSnapshots
+from getCGs import getCGs
 
-class deleteSnapshots:
+class deleteCGSnapshots:
 
-    def __init__(self,svm,volumes,snapshots,**kwargs):
+    def __init__(self,svm,cgname,snapshots,**kwargs):
         self.result=None
         self.reason=None
         self.stdout=[]
         self.stderr=[]
         self.svm=svm
-        self.volumematch=[]
+        self.cgmatch=[]
         self.snapshotmatch=snapshots
         self.maxage=False
         self.maxcount=False
@@ -31,22 +32,22 @@ class deleteSnapshots:
             self.apicaller=''
         localapi='->'.join([self.apicaller,self.apibase])
         
-        if type(volumes) is str:
-            self.volumematch=[volumes]
-        else:
-            try:
-                newlist=list(volumes)
-            except:
-                print("Error: 'volumes' passed to createSnapshots with illegal type")
-                sys.exit(1)
-            for item in newlist:
-                self.volumematch.append(item)
-
         if 'debug' in kwargs.keys():
             self.debug=kwargs['debug']
         
         if 'force' in kwargs.keys():
             self.force=kwargs['force']
+
+        if type(cgname) is str:
+            self.cgmatch=cgname.split(',')
+        else:
+            try:
+                newlist=list(cgname)
+            except:
+                print("Error: 'name' passed to deleteCGSnapshots with illegal type")
+                sys.exit(1)
+            for item in newlist:
+                self.cgmatch.append(item)
 
         if self.debug & 1:
             userio.message('',service=localapi + ":INIT")
@@ -79,11 +80,6 @@ class deleteSnapshots:
             self.maxcount=kwargs['maxcount']
             if self.debug & 1:
                 userio.message("Snapshot count limit set at " + str(kwargs['maxcount']))
-        
-        if not (self.maxage or self.maxcount) and not self.force:
-            if self.snapshotmatch == '*' or self.snapshotmatch is None or self.snapshotmatch == '^.*':
-                    print("Cannot delete snapshots without restrictions unless force=True")
-                    sys.exit(1)
 
     def showDebug(self):
         userio.debug(self)
@@ -97,8 +93,22 @@ class deleteSnapshots:
         localapi='->'.join([self.apicaller,self.apibase + ".go"])
 
         if self.debug & 1:
-            userio.message("Retriving snapshots for " + ','.join(self.volumematch),service=localapi + ":OP")
-        snapshots=getSnapshots(self.svm,volumes=self.volumematch,name=self.snapshotmatch,apicaller=localapi,debug=self.debug)
+            userio.message("Retriving CGs for " + ','.join(self.cgmatch),service=localapi + ":OP")
+
+        mycgs=getCGs(self.svm,name=self.cgmatch,apicaller=localapi,debug=self.debug)
+        if not mycgs.go():
+            self.result=1
+            self.reason=mycgss.reason
+            self.stdout=mycgs.stdout
+            self.stderr=mycgs.stderr
+            if self.debug & 1:
+                self.showDebug()
+            return(False)
+
+        foundcgs=list(mycgs.cgs.keys())
+        if self.debug & 1:
+            userio.message("Retriving CG snapshots for " + ','.join(foundcgs),service=localapi + ":OP")
+        snapshots=getCGSnapshots(self.svm,cgs=foundcgs,name=self.snapshotmatch,apicaller=localapi,debug=self.debug)
 
         if not snapshots.go():
             self.result=1
@@ -122,17 +132,17 @@ class deleteSnapshots:
                     if self.maxage:
                         if now - epoch > self.maxage:
                             if self.debug & 1:
-                                userio.message("Snapshot " + volume + ":" + snap + " exceeds max age",service=localapi + ":OP")
+                                userio.message("Snapshot " + target + ":" + snap + " exceeds max age",service=localapi + ":OP")
                             snapshots2delete.append((target,targetuuid,snap,snapuuid,epoch))
                     else:
                         snapshots2delete.append((target,targetuuid,snap,snapuuid,epoch))
             
                 snapshots2delete.sort(key=lambda x: x[4], reverse=True)
 
-                if self.maxage and len(snapshots2delete) > 0 and not self.force and (self.snapshotmatch == '*' or self.snapshotmatch is None):
-                    del snapshots2delete[0]
+                if self.maxage and (len(snaplist) - len(snapshots2delete) == 0) and not self.force and (self.snapshotmatch == '*' or self.snapshotmatch is None):
                     if self.debug & 1:
-                        userio.message("Blocking deletion of last snapshot on " + target ,service=localapi + ":OP")
+                        userio.message("Blocking deletion of last snapshot " + snapshots2delete[0][2] + " on " + target ,service=localapi + ":OP")
+                    del snapshots2delete[0]
 
                 if self.maxcount:
                     if self.debug & 1:
@@ -145,26 +155,26 @@ class deleteSnapshots:
                 for item in snapshots2delete:
                     self.snapshots2delete.append(item)
 
-            for target, targetuuid, snap, snapuuid, epoch in self.snapshots2delete:
+            for target, targetdata, snapname, snapuuid, epoch in self.snapshots2delete:
                 rest=doREST.doREST(self.svm, \
-                                       'delete', \
-                                       '/storage/volumes/' + targetuuid + '/snapshots/' + snapuuid + '?return_timeout=60', \
-                                       debug=self.debug)
+                                   'delete', \
+                                   '/application/consistency-groups/' + targetdata['uuid'] + '/snapshots/' + snapuuid + '?return_timeout=60', \
+                                   debug=self.debug)
 
                 if rest.result == 0 and rest.reason=='OK':
                     if target in self.deleted.keys():
-                        self.deleted[target].append(snap)
+                        self.deleted[target].append(snapname)
                     else:
-                        self.deleted[target]=[snap]
+                        self.deleted[target]=[snapname]
                     if self.debug & 1:
-                        userio.message("Deleted snapshot " + snap + " on " + target,service=localapi + ":OP")
+                        userio.message("Deleted snapshot " + snapname + " on " + target,service=localapi + ":OP")
                 else:
                     if self.debug & 1:
-                        userio.message("Failed to delete snapshot " + snap + " on " + target,service=localapi + ":OP")
+                        userio.message("Failed to delete snapshot " + snapname + " on " + target,service=localapi + ":OP")
                     if target in self.failed.keys():
-                        self.failed[target].append(snap)
+                        self.failed[target].append(snapname)
                     else:
-                        self.failed[target]=[snap]
+                        self.failed[target]=[snapname]
                     self.result=1
                     self.reason=rest.reason
                     self.stdout=rest.stdout

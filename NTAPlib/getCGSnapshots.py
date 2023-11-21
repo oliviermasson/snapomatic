@@ -46,7 +46,6 @@ class getCGSnapshots:
         self.cg=False
         self.cgs={}
         self.cghierarchy={}
-        self.volumematch=[]
         self.cgmatch=[]
         self.volumes=[]
         self.snapshots={}
@@ -63,20 +62,6 @@ class getCGSnapshots:
         if 'cg' in kwargs.keys():
             self.cg=kwargs['cg']
 
-        if 'volumes' in kwargs.keys():
-            if type(kwargs['volumes']) is str:
-                self.volumematch=[kwargs['volumes']]
-            else:
-                try:
-                    newlist=list(kwargs['volumes'])
-                except:
-                    print("Error: 'volumes' passed to getSnapshots with illegal type")
-                    sys.exit(1)
-                for item in newlist:
-                    self.volumematch.append(item)
-        else:
-            self.volumematch='*'
-        
         if 'cgs' in kwargs.keys():
             if type(kwargs['cgs']) is str:
                 self.cgmatch=[kwargs['cgs']]
@@ -111,30 +96,16 @@ class getCGSnapshots:
         localapi='->'.join([self.apicaller,self.apibase + ".go"])
         
         self.cgapi='/application/consistency-groups/{UUID}/snapshots'
-        if self.cg:
-            self.cgrestargs='fields=uuid,' + \
-                            'name,' + \
-                            'create_time,' + \
-                            'snapshot_volumes.volume.name,' + \
-                            'snapshot_volumes.volume.uuid,' + \
-                            'snapshot_volumes.snapshot.name,' + \
-                            'snapshot_volumes.snapshot.uuid,' + \
-                            'snapmirror_label,' + \
-                            '&svm.name=' + self.svm
-        else:
-            self.cgrestargs='fields=snapshot_volumes.volume.name,' + \
-                            'snapshot_volumes.volume.uuid,' + \
-                            'snapshot_volumes.snapshot.uuid' + \
-                            '&svm.name=' + self.svm
+        self.cgrestargs='fields=uuid,' + \
+                        'name,' + \
+                        'create_time,' + \
+                        'snapshot_volumes.volume.name,' + \
+                        'snapshot_volumes.volume.uuid,' + \
+                        'snapshot_volumes.snapshot.name,' + \
+                        'snapshot_volumes.snapshot.uuid,' + \
+                        'snapmirror_label,' + \
+                        '&svm.name=' + self.svm
         
-        self.volapi='/storage/volumes/*/snapshots'
-        self.volrestargs='fields=uuid,' + \
-                      'name,' + \
-                      'create_time,' + \
-                      'snapmirror_label,' + \
-                      '&svm.name=' + self.svm
-
-
         if self.name is not None:
             if type(self.name) is str:
                 self.cgrestargs=self.cgrestargs + '&snapshot_volumes.snapshot.name='+ self.name                 
@@ -143,9 +114,8 @@ class getCGSnapshots:
         
         if self.debug & 1:
             userio.message("Retriving CG data on " + self.svm,service=localapi + ":OP")
-            userio.message("Volume search list: " + ','.join(self.volumematch),service=localapi + ":OP")
 
-        cgs=getCGs(self.svm,name=self.cgmatch,volumes=self.volumematch,apicaller=localapi,debug=self.debug)
+        cgs=getCGs(self.svm,name=self.cgmatch,apicaller=localapi,debug=self.debug)
         if cgs.go():
             self.cgs=cgs.cgs
             for cgname in self.cgs.keys():
@@ -161,7 +131,6 @@ class getCGSnapshots:
                     for record in rest.response['records']:
                         uuid=record['uuid']
                         name=record['name']
-
                         createtime=record['create_time']
                         if createtime[-3] == ':':
                             fmttime=createtime[:-3] + createtime[-2:]
