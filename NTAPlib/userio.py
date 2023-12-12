@@ -307,8 +307,6 @@ def warn(args,**kwargs):
     if 'prenewline' in kwargs.keys():
         if kwargs['prenewline']:
             linefeed()
-        else:
-            linefeed()
     if type(args) is list:
         for line in args:
             sys.stdout.write("WARNING: " + line + "\n")

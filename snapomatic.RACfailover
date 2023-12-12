@@ -183,7 +183,7 @@ for lun in devices:
 
 for item in multipaths:
     if item.luntype == 'NETAPP' and re.match(volpatternmatch,item.volume):
-        header=doProcess(gridhome.home + '/bin/kfed read ' + item.path, env={'ORACLE_HOME':gridhome.home}
+        header=doProcess(gridhome.home + '/bin/kfed read ' + item.device, env={'ORACLE_HOME':gridhome.home}
                                                                       , debug=debug)
         if header.stdout is not None:
             try:
