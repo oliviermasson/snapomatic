@@ -10,14 +10,16 @@ import userio
 
 snapomaticversion='DEV'
 
-validoptions={'sid':'str','stop':'bool','start':'bool','debug':'bool','force':'bool'}
+validoptions={'sid':'multistr','stop':'bool','start':'bool','debug':'bool','force':'bool'}
 
 requiredoptions=['sid',['start','stop']]
+
+mutex=[['start','stop']]
 
 usage="Version " + snapomaticversion + "\n" + \
       "oracleBackup\n" + \
       "        [--sid]\n" + \
-      "        (name of database SID or comma-delimited list\n" + \
+      "        (name(s) of database SIDs\n" + \
       "        [--start or --stop]\n" + \
       "        (start or stop backup mode)\n" \
       "        [--force]\n" + \
@@ -25,28 +27,25 @@ usage="Version " + snapomaticversion + "\n" + \
       "        [--debug]\n" + \
       "        (show debug output)\n"
 
-myoptions=userio.validateoptions(sys.argv,validoptions,usage=usage,required=requiredoptions)
+myopts=userio.validateoptions(sys.argv,validoptions,mutex=mutex,usage=usage,required=requiredoptions)
 
-sid=myoptions['OPTS']['sid']
+sidlist=myopts.sid
 
-if 'debug' in myoptions['OPTS'].keys():
+if myopts.debug:
     debug=25
 else:
     debug=0
 
-if 'force' in myoptions['OPTS'].keys():
+if myopts.force:
     force=True
 else:
     force=False
 
-sid=myoptions['OPTS']['sid']
-
 try:
-    command = myoptions['OPTS']['start']
+    command = myopts.start
 except:
-    command = not myoptions['OPTS']['stop']
+    command = not myopts.stop
     
-sidlist=sid.split(',')
 for sid in sidlist:
     change=setOracleBackup.setOracleBackup(sid,debug=debug,force=force)
     if change.go(command):

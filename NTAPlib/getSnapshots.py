@@ -1,4 +1,3 @@
-#
 # CAUTION: if a name pattern match used, all snapshot operations are filted
 #          for that pattern, including the recent snapshot
 #
@@ -31,6 +30,7 @@ import datetime
 import re
 import sys
 import userio
+from getCGs import getCGs
 from getVolumes import getVolumes
 
 class getSnapshots:
@@ -46,13 +46,6 @@ class getSnapshots:
         self.volumes=[]
         self.snapshots={}
         self.debug=False
-        
-        self.api='/storage/volumes/*/snapshots'
-        self.restargs='fields=uuid,' + \
-                 'name,' + \
-                 'create_time,' + \
-                 'snapmirror_label' + \
-                 '&svm.name=' + svm
 
         self.apibase=self.__class__.__name__
         if 'apicaller' in kwargs.keys():
@@ -60,7 +53,7 @@ class getSnapshots:
         else:
             self.apicaller=''
         localapi='->'.join([self.apicaller,self.apibase])
-        
+
         if 'volumes' in kwargs.keys():
             if type(kwargs['volumes']) is str:
                 self.volumematch=[kwargs['volumes']]
@@ -74,20 +67,15 @@ class getSnapshots:
                     self.volumematch.append(item)
         else:
             self.volumematch='*'
-
+        
         if 'name' in kwargs.keys() and kwargs['name'] is not None:
             self.name=kwargs['name']
-            if type(kwargs['name']) is str:
-                self.restargs=self.restargs + '&name='+ kwargs['name']                 
-            else:
-                self.restargs=self.restargs + '&name='+ '|'.join(kwargs['name'])               
 
         if 'debug' in kwargs.keys():
             self.debug=kwargs['debug']
 
         if self.debug & 1:
             userio.message('',service=localapi + ":INIT")
-
 
     def showDebug(self):
         userio.debug(self)
@@ -97,6 +85,26 @@ class getSnapshots:
         if 'apicaller' in kwargs.keys():
             self.apicaller=kwargs['apicaller']
         localapi='->'.join([self.apicaller,self.apibase + ".go"])
+        
+        self.cgapi='/application/consistency-groups/{UUID}/snapshots'
+        self.cgrestargs='fields=snapshot_volumes.volume.name,' + \
+                        'snapshot_volumes.volume.uuid,' + \
+                        'snapshot_volumes.snapshot.uuid' + \
+                        '&svm.name=' + self.svm
+        
+        self.volapi='/storage/volumes/*/snapshots'
+        self.volrestargs='fields=uuid,' + \
+                         'name,' + \
+                         'create_time,' + \
+                         'snapmirror_label,' + \
+                         '&svm.name=' + self.svm
+
+
+        if self.name is not None:
+            if type(self.name) is str:
+                self.volrestargs=self.volrestargs + '&name='+ self.name                 
+            else:
+                self.volrestargs=self.volrestargs + '&name='+ '|'.join(self.name)               
 
         if self.debug & 1:
             userio.message("Retriving volumes on " + self.svm,service=localapi + ":OP")
@@ -118,12 +126,48 @@ class getSnapshots:
             self.reason="No matching volumes"
             return(False)
 
+        if self.debug & 1:
+            userio.message("Retriving CG data on " + self.svm,service=localapi + ":OP")
+        cgs=getCGs(self.svm,volumes=self.volumes,apicaller=localapi,debug=self.debug)
+
+        if cgs.go():
+            self.cgs=cgs.cgs
+            cgsnaps=[]
+            for cgname in self.cgs.keys():
+                nextapi=self.cgapi.replace('{UUID}',self.cgs[cgname]['uuid'])
+                if self.debug & 1:
+                    userio.message("Retriving CG snapshots for CG " + cgname,service=localapi + ":OP")
+                rest=doREST.doREST(self.svm,'get',nextapi,restargs=self.cgrestargs,debug=self.debug)
+                if rest.result == 0:
+                    for record in rest.response['records']:
+                        for subrecord in record['snapshot_volumes']:
+                            volume=subrecord['volume']['name']
+                            voluuid=subrecord['volume']['uuid']
+                            snapuuid=subrecord['snapshot']['uuid']
+                            cgsnaps.append((volume,voluuid,snapuuid))
+                else:
+                    self.result=1
+                    self.reason=rest.reason
+                    self.stdout=rest.stdout
+                    self.stderr=rest.stderr
+                    if self.debug & 4:
+                        self.showDebug()
+                    return(False)
+        else:
+            self.result=1
+            self.reason=cgs.reason
+            self.stdout=cgs.stdout
+            self.stderr=cgs.stderr
+            if self.debug & 4:
+                self.showDebug()
+            return(False)
+
         for volmatch in self.volumes:
             if volmatch not in self.snapshots.keys():
                 self.snapshots[volmatch]={'snapshots':{},'recent':{},'uuid':matchingvolumes.volumes[volmatch]['uuid']}
             if self.debug & 1:
                 userio.message("Retrieving snapshots for " + self.svm + ":" + volmatch,service=localapi + ":OP")
-            rest=doREST.doREST(self.svm,'get',self.api,restargs=self.restargs + '&volume.name=' + volmatch,debug=self.debug)
+            rest=doREST.doREST(self.svm,'get',self.volapi,restargs=self.volrestargs + '&volume.name=' + volmatch,debug=self.debug)
             if rest.result == 0:
                 for record in rest.response['records']:
                     uuid=record['uuid']
@@ -131,15 +175,16 @@ class getSnapshots:
                     volume=record['volume']['name']
                     voluuid=record['volume']['uuid']
                     createtime=record['create_time']
-                    if createtime[-3] == ':':
-                        fmttime=createtime[:-3] + createtime[-2:]
-                    fmttime=fmttime.replace('T',' ',1)
-                    epoch=datetime.datetime.strptime(fmttime,'%Y-%m-%d %H:%M:%S%z').timestamp()
+                    if ((volume,voluuid,uuid)) not in cgsnaps:
+                        if createtime[-3] == ':':
+                            fmttime=createtime[:-3] + createtime[-2:]
+                        fmttime=fmttime.replace('T',' ',1)
+                        epoch=datetime.datetime.strptime(fmttime,'%Y-%m-%d %H:%M:%S%z').timestamp()
     
-                    self.snapshots[volume]['snapshots'][name]={'createtime':createtime,
-                                                               'epoch':epoch,
-                                                               'date':fmttime,
-                                                               'uuid':uuid}
+                        self.snapshots[volume]['snapshots'][name]={'createtime':createtime,
+                                                                   'epoch':epoch,
+                                                                   'date':fmttime,
+                                                                   'uuid':uuid}
                 recent=0
                 preordered=[]
                 for name in self.snapshots[volmatch]['snapshots'].keys():
@@ -154,7 +199,6 @@ class getSnapshots:
                         snaplist.append([name,self.snapshots[volmatch]['snapshots'][name]['date']])
                     userio.grid(snaplist,service=localapi + ":DATA")
                     userio.message("Total matches: " + str(len(snaplist)-1),service=localapi + ":DATA")
-
             else:
                 self.result=1
                 self.reason=rest.reason
@@ -163,6 +207,8 @@ class getSnapshots:
                 if self.debug & 4:
                     self.showDebug()
                 return(False)
+
+
         self.result=0
         if self.debug & 4:
             self.showDebug()

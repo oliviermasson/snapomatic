@@ -1,6 +1,6 @@
 import sys
-import getopt
 import os
+import argparse
 import getpass
 import random
 import datetime
@@ -21,10 +21,18 @@ def randomtoken(*args):
     else:
         return(tokens)
 
+
+def checkdate(field):
+    try:
+        timeformat='%Y-%m-%dT%H:%M:%S%z'
+        truevalue=datetime.datetime.strptime(field,timeformat).timestamp()
+        return(truevalue)
+    except:
+        msg = "Format for " + field + " does not match YYYY.MM.DDTHH:MM:SS[TZ]"
+        raise argparse.ArgumentTypeError(msg)
+
 def validateoptions(sysargs,validoptions,**kwargs):
-    returndict={}
-    returndict['MODE']=None
-    returndict['OPTS']={}
+    mode=None
     passedargs=[]
     usage="Error: Unable to process arguments"
         
@@ -34,90 +42,87 @@ def validateoptions(sysargs,validoptions,**kwargs):
     if len(sysargs) < 2:
         fail(usage)
 
-    if 'modes' in kwargs.keys():
-        if len(sysargs) > 1 and sysargs[1] in kwargs['modes']:
-            returndict['MODE']=sysargs[1]
-        else:
-            fail(usage)
+    parser=argparse.ArgumentParser(prog=sys.argv[0],description=usage,epilog='')
 
-    optionlist=[]
-    if type(validoptions) is dict:
-        if 'modes' in kwargs.keys():
-            for mode in validoptions.keys():
-                if mode == returndict['MODE']:
-                    validoptions=validoptions[mode]
+    dicts=0
+    nondicts=0
+    for item in validoptions.keys():
+        if type(validoptions[item]) is dict:
+            dicts+=1
         else:
-            validoptions=validoptions
-
-    for option in validoptions:
-        if validoptions[option] == 'bool':
-            optionlist.append(option)
-        else:
-            optionlist.append(option + "=")
-
-    if returndict['MODE'] is None:
-        optlist=sysargs[1:]
+            nondicts+=1
+    if dicts > 0 and nondicts == 0:
+        modal=True
+        mode=sysargs[1]
+        parser.add_argument('mode')
+    elif dicts == 0 and nondicts > 0:
+        modal=False
     else:
-        optlist=sysargs[2:]
+        fail("Corrupt validoptions dictionary passed")
     
-    try:
-        options,args = getopt.getopt(optlist,'',optionlist)
-    except getopt.GetoptError as e:
-        message(usage)
-        fail(str(e))
-    except Exception as e:
-        fail(usage)
+    if not modal and 'acceptpaths' in kwargs.keys() and kwargs['acceptpaths']:
+        parser.add_argument('paths',nargs='+',default=None)
 
-    for key,value in options:
-        returndict['OPTS'][str(key).strip('=').strip('--')]=None
-
-    for o, a in options:
-        barearg=o
-        if o.startswith('--'):
-            barearg=o[2:]
-        bareoption=set([barearg,barearg + "="]).intersection(validoptions.keys()).pop()
-        if validoptions[bareoption] == 'str':
-            truevalue=str(a)
-        elif validoptions[bareoption] == 'int':
-            truevalue=int(a)
-        elif validoptions[bareoption] == 'bool':
-            truevalue=True
-        elif validoptions[bareoption] == 'duration':
-            truevalue=duration2seconds(a)
-            if not truevalue:
-                fail("Illegal value for --" + barearg)
-        elif validoptions[bareoption] == 'timestamp':
-            try:
-                timeformat='%Y-%m-%dT%H:%M:%S%z'
-                truevalue=datetime.datetime.strptime(a,timeformat).timestamp()
-            except:
-                fail(["Format for " + a + " does not match YYYY.MM.DDTHH:MM:SS[TZ]",
-                      "Example: May 1st 2019 at 1:35pm US Eastern Daylight Time is 2019-05-01T13:35:00-0400"])
-        returndict['OPTS'][barearg]=truevalue
-    
     if 'required' in kwargs.keys():
-        if type(kwargs['required']) is list or type(kwargs['required']) is tuple:
-            for item in kwargs['required']:
-                if type(item) is str:
-                    if item not in returndict['OPTS'].keys():
-                        fail("--" + item.strip('=') + " is required")
-                elif type(item) is list:
-                    if not set(item).intersection(set(returndict['OPTS'].keys())):
-                        fail("One of the following arguments is required: --" + ' --'.join(item).strip('='))
-                    elif len(set(item).intersection(set(returndict['OPTS'].keys()))) > 1:
-                        fail("Only one of the following arguments is allowed: --" + ' --'.join(item).strip('='))
-        elif type(kwargs['required']) is dict:
-            for mode in kwargs['required']:
-                if mode == returndict['MODE']:
-                    for option in kwargs['required'][mode]:
-                        if type(option) is str:
-                            if option not in returndict['OPTS'].keys():
-                                fail("--" + option.strip('=') + " is required")
-                        elif type(option) is list:
-                            if not set(option).intersection(set(returndict['OPTS'].keys())):
-                                fail("One of the following arguments is required: --" + ' --'.join(option).strip('='))
-                        elif len(set(item).intersection(set(returndict['OPTS'].keys()))) > 1:
-                            fail("Only one of the following arguments is allowed: --" + ' --'.join(item).strip('='))
+        if modal:
+            requiredoptions=kwargs['required'][mode]
+        else:
+            requiredoptions=kwargs['required']
+    else:
+        requiredoptions=False
+
+    if modal:
+        validoptions=validoptions[mode]
+    else:
+        validoptions=validoptions
+
+    for option in validoptions.keys():
+        if requiredoptions:
+            if option in requiredoptions:
+                requirement=True
+            else:
+                requirement=False
+        else:
+            requirement=False
+        if validoptions[option] == 'bool':
+            parser.add_argument('--' + option, \
+                                required=requirement, \
+                                action='store_true')
+        elif validoptions[option] == 'int':
+            parser.add_argument('--' + option, \
+                                nargs='?',
+                                type=int,
+                                default=None,
+                                required=requirement)
+        elif validoptions[option] == 'str':
+            parser.add_argument('--' + option, \
+                                nargs='?',
+                                default=None,
+                                required=requirement)
+        elif validoptions[option] == 'multistr':
+            parser.add_argument('--' + option, \
+                                nargs='+',
+                                required=requirement)
+        elif validoptions[option] == 'timestamp':
+            parser.add_argument('--' + option, \
+                                 nargs='?',
+                                 default=None,
+                                 required=requirement,
+                                 type=checkdate)
+
+    args=parser.parse_args()
+    
+    if 'mutex' in kwargs.keys():
+        passedargs=[]
+        for item in sysargs:
+            if item[:2] == '--':
+                passedargs.append(item[2:])
+        passedargs=set(passedargs)
+        for item in kwargs['mutex']:
+            if len(item) < 1:
+                fail("Corrupt mutex lists")
+            if len(passedargs.intersection(set(item))) > 1:
+                fail("Arguments " + ','.join(item) + " are mutually exclusive")
 
     if 'dependent' in kwargs.keys():
         for key in kwargs['dependent'].keys():
@@ -130,7 +135,7 @@ def validateoptions(sysargs,validoptions,**kwargs):
                         if not set(item).intersection(set(returndict['OPTS'].keys())):
                             fail("Argument --" + key + " requires one of the following arguments: --" + ' --'.join(item))
     
-    return(returndict)
+    return(args)
 
 def basicmenu(**kwargs):
     returnnames=False
@@ -301,8 +306,6 @@ def fail(args,**kwargs):
 def warn(args,**kwargs):
     if 'prenewline' in kwargs.keys():
         if kwargs['prenewline']:
-            linefeed()
-        else:
             linefeed()
     if type(args) is list:
         for line in args:

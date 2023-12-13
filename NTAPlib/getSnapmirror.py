@@ -77,7 +77,12 @@ class getSnapmirror:
                             volumematch=True
                             break
                         elif re.findall(r'[?*.^$]',pattern):
-                            volpatternmatch=re.compile(pattern)
+                            try:
+                                volpatternmatch=re.compile(pattern)
+                            except:
+                                self.result=1
+                                self.reason="Illegal volume name match"
+                                return(False)
                         else:
                             volpatternmatch=re.compile('^' + pattern + '$')
                         if re.findall(volpatternmatch,srcvol) or re.findall(volpatternmatch,dstvol):

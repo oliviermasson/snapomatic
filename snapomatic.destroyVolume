@@ -12,40 +12,36 @@ import userio
 
 snapomaticversion='dev'
 
-validoptions={'svm':'str',
+validoptions={'target':'multistr',
               'volume':'str',
               'debug':'bool',
               'restdebug':'bool'}
 
-requiredoptions=['svm','volume']
+requiredoptions=['target']
 
 usage="Version " + snapomaticversion + "\n" + \
-      "          --svm\n" + \
-      "          (name of target svm)\n\n" + \
-      "          --volume\n" + \
-      "          (volume name)\n\n" + \
+      "          --target\n" + \
+      "          (svm volume)\n\n" + \
       "          [--debug]\n" + \
       "          (show debug output)\n\n" + \
       "          [--restdebug]\n" + \
       "          (show REST API calls and responses)\n\n"
 
-myoptions=userio.validateoptions(sys.argv,validoptions,usage=usage,required=requiredoptions)
+myopts=userio.validateoptions(sys.argv,validoptions,usage=usage,required=requiredoptions)
 
 debug=0
 
-svm=myoptions['OPTS']['svm']
-volume=myoptions['OPTS']['volume']
+if not len(myopts.target) == 2:
+    userio.fail(usage)
+else:
+    svm=myopts.target[0]
+    volume=myopts.target[1]
 
-try:
-    if myoptions['OPTS']['debug']:
-        debug=debug+1
-except:
-    pass
-try:
-    if myoptions['OPTS']['restdebug']:
-        debug=debug+2
-except:
-    pass
+debug=0
+if myopts.debug:
+    debug=debug+1
+if myopts.restdebug:
+    debug=debug+2
 
 destroy=destroyVolumes(svm,volume,debug=debug)
 if not destroy.go():

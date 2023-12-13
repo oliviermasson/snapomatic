@@ -6,7 +6,10 @@ if pythonversion[0] != 3 or (pythonversion[1] < 6 or pythonversion[1] > 11):
     sys.exit(1)
 sys.path.append(sys.path[0] + "/NTAPlib")
 from getSnapshots import getSnapshots
+from getCGSnapshots import getCGSnapshots
 from createSnapshots import createSnapshots
+from createCGSnapshots import createCGSnapshots
+from deleteCGSnapshots import deleteCGSnapshots
 from deleteSnapshots import deleteSnapshots
 import userio
 
@@ -15,19 +18,19 @@ snapomaticversion='DEV'
 knownmodes=['show','create','delete','restore']
 
 validoptions={}
-validoptions['create']={'name':'str','prefix':'str','target':'str','cg':'bool','label':'str', \
+validoptions['create']={'name':'str','prefix':'str','target':'multistr','cg':'bool','label':'str', \
                         'debug':'bool', \
                         'restdebug':'bool'}
 
-validoptions['restore']={'name':'str','target':'str','cg':'bool', \
+validoptions['restore']={'name':'str','target':'multistr','cg':'bool', \
                          'debug':'bool', \
                          'restdebug':'bool'}
 
-validoptions['show']={'name':'str','prefix':'str','target':'str','cg':'bool', \
+validoptions['show']={'name':'str','prefix':'str','target':'multistr','cg':'bool', \
                       'debug':'bool', \
                       'restdebug':'bool'}
 
-validoptions['delete']={'name':'str','prefix':'str','target':'str','maxcount':'int','maxage':'str', \
+validoptions['delete']={'name':'str','prefix':'str','target':'multistr','maxcount':'int','maxage':'str','cg':'bool', \
                         'debug':'bool', \
                         'force':'bool', \
                         'restdebug':'bool'}
@@ -37,33 +40,35 @@ requiredoptions={'create'   :['target',['name','prefix']], \
                  'show'      :['target'], \
                  'delete'   :['target',['name','prefix','maxcount','maxage']]}
 
+mutex=[['name','prefix']]
+
 usage="Version " + snapomaticversion + "\n" + \
       "snapshot show\n" + \
       "        [--target]\n" + \
-      "        (name of target for snapshot operation)\n" + \
-      "        [--name]\n" + \
-      "        (filesystem, LUN target, or svm:volume)\n\n" + \
-      "        (Optional. Name for snapshot. Wildcards accepted)\n\n" + \
+      "        (svm [filesystem, LUN, or volume]\n\n" + \
+      "        (Optional. Name for snapshot. Wildcards accepted.)\n\n" + \
+      "        [--cg]\n" + \
+      "        (Restrict search to CG snapshots. Wildcards accepted.)\n\n" + \
       "        [--debug]\n" + \
       "        (show debug output)\n\n" + \
       "        [--restdebug]\n" + \
       "        (show REST API debug output)\n\n" \
       "snapshot create\n" + \
       "        [--target]\n" + \
-      "        (name of target for snapshot operation)\n" + \
-      "        (filesystem, LUN target, or svm:volume)\n\n" + \
+      "        (svm [filesystem, CG, LUN, or volume]\n\n" + \
       "        [--name||prefix]\n" + \
       "        (Name or prefix for snapshot)\n\n" + \
       "        [--label|]\n" + \
       "        (Snapmirror label for the snapshot)\n\n" + \
+      "        [--cg]\n" + \
+      "        (Create CG snapshots.)\n\n" + \
       "        [--debug]\n" + \
       "        (show debug output)\n\n" + \
       "        [--restdebug]\n" + \
       "        (show REST API debug output)\n\n" + \
       "snapshot delete\n" + \
       "        [--target]\n" + \
-      "        (name of target for snapshot operation)\n" + \
-      "        (filesystem, LUN target, or svm:volume)\n\n" + \
+      "        (svm [filesystem, LUN, or volume]\n\n" + \
       "        [--name]\n" + \
       "        (Optional. Name of snapshot. Wildcards accepted)\n\n" + \
       "        [--maxcount]\n" + \
@@ -78,126 +83,146 @@ usage="Version " + snapomaticversion + "\n" + \
       "        [--restdebug]\n" + \
       "        (show REST API debug output)\n" 
 
-myoptions=userio.validateoptions(sys.argv,validoptions,modes=knownmodes,usage=usage,required=requiredoptions)
+myopts=userio.validateoptions(sys.argv,validoptions,modes=knownmodes,usage=usage,mutex=mutex,required=requiredoptions)
 
-if 'prefix' in myoptions['OPTS'].keys() and 'name' in myoptions['OPTS'].keys():
-    userio.fail("Cannot use both --name and --prefix")
+svm=myopts.target[0]
+voltargets=[]
+luntargets=[]
+fstargets=[]
+if len(myopts.target) == 1:
+    voltargets.append('*')
+else:
+    for item in myopts.target[1:]:
+        if not item[0] == '/':
+            voltargets.append(item)
 
-target=myoptions['OPTS']['target']
-try:
-    out=target.split(':')
-    svm=out[0]
-    targettype='VOL'
-    if len(out) == 1:
-        volumes='*'
-    elif len(out) == 2:
-        volumes=out[1]
-    else:
-        userio.fail(usage)
-except:
-    pass
+if myopts.mode == 'create' and voltargets==['*']:
+    userio.fail("Cannot create snapshots with volumes = *")
 
 debug=0
-try:
-    if myoptions['OPTS']['debug']:
-        debug=debug+1
-except:
-    pass
-try:
-    if myoptions['OPTS']['restdebug']:
-        debug=debug+2
-except:
-    pass
+if myopts.debug:
+    debug=debug+1
+if myopts.restdebug:
+    debug=debug+2
 
-try:
-    name=myoptions['OPTS']['name']
-except:
-    name=None
+name=myopts.name
 
-try:
-    label=myoptions['OPTS']['label']
-except:
-    label=None
+if myopts.mode == 'create':
+    label=myopts.label
+    if myopts.prefix is not None:
+        name=myopts.prefix + '_' + userio.randomtoken()[:32]
 
-try:
-    if myoptions['MODE'] == 'create':
-        name=myoptions['OPTS']['prefix'] + '_' + userio.randomtoken()[:32]
-    if myoptions['MODE'] == 'delete' or myoptions['MODE'] == 'show':
-        name=myoptions['OPTS']['prefix'] + '_*'
-except:
+if myopts.mode == 'show':
+    if myopts.prefix is not None:
+        name=myopts.prefix + '_*'
+
+if myopts.mode == 'delete':
+    maxcount=myopts.maxcount
+    maxage=myopts.maxage
+    force=myopts.force
+    if myopts.prefix is not None:
+        name=myopts.prefix + '_*'
     try:
-        name=myoptions['OPTS']['name']
+        if (name == '*' or name == '.*' or name == '.*$') and myopts.force:
+            pass
     except:
-        pass
+        userio.fail("Cannot use snapshot wildcard without --force")
 
-try:
-    maxcount=myoptions['OPTS']['maxcount']
-except:
-    maxcount=False
+cg=myopts.cg
 
-try:
-    maxage=myoptions['OPTS']['maxage']
-except:
-    maxage=False
-
-try:
-    force=myoptions['OPTS']['force']
-except:
-    force=False
-
-try:
-    if (name == '*' or name == '.*' or name == '.*$') and myoptions['OPTS']['force']:
-        pass
-except:
-    userio.fail("Cannot use snapshot wildcard without --force")
-
-if myoptions['MODE'] == 'delete':
-    if targettype=='VOL':
-        snapshots=deleteSnapshots(svm,volumes,name,force=force,maxcount=maxcount,maxage=maxage,debug=debug)
+if myopts.mode == 'delete':
+    if len(voltargets) > 0:
+        if cg:
+            snapshots=deleteCGSnapshots(svm,voltargets,name,force=force,maxcount=maxcount,maxage=maxage,debug=debug)
+            grid=[['CG','Volume','Snapshot','Status']]
+        else:
+            snapshots=deleteSnapshots(svm,voltargets,name,force=force,maxcount=maxcount,maxage=maxage,debug=debug)
+            grid=[['Volume','Snapshot','Status']]
         if not snapshots.go():
             userio.message("ERROR: " + snapshots.reason)
         else:
             userio.message("Success")
-        grid=[['Volume','Snapshot','Status']]
-        deletedvols=list(snapshots.deleted.keys())
-        deletedvols.sort()
-        for volume in deletedvols:
-            for snap in snapshots.deleted[volume]:
-                grid.append([volume,snap,'Deleted'])
+        deleted=list(snapshots.deleted.keys())
+        deleted.sort()
+        if cg:
+            for cg in deleted:
+                deletedvols=list(snapshots.deleted[cg])
+                deletedvols.sort()
+                for volume in deletedvols:
+                    for snap in snapshots.deleted[cg][volume]:
+                        grid.append([cg,volume,snap,'Deleted'])
+        else:
+            for volume in deleted:
+                for snap in snapshots.deleted[volume]:
+                    grid.append([volume,snap,'Deleted'])
         failed2delete=list(snapshots.failed.keys())
         failed2delete.sort()
-        for volume in failed2delete:
-            for snap in snapshots.failed[volume]:
-                grid.append([volume,snap,'FAIL'])
-        if len(failed2delete) > 0 or len(deletedvols) > 0:
+        if cg:
+            for cg in failed2delete:
+                deletedvols=list(snapshots.deleted[cg])
+                deletedvols.sort()
+                for volume in deletedvols:
+                    for snap in snapshots.failed[volume]:
+                        grid.append([volume,snap,'FAIL'])
+        else:
+            for volume in failed2delete:
+                for snap in snapshots.failed[volume]:
+                    grid.append([volume,snap,'FAIL'])
+        if len(failed2delete) > 0 or len(deleted) > 0:
             userio.grid(grid)
 
-elif myoptions['MODE'] == 'create':
-    if targettype=='VOL':
-        snapshots=createSnapshots(svm,volumes,name,label=label,debug=debug)
+elif myopts.mode == 'create':
+    if len(voltargets) > 0:
+        if cg:
+            snapshots=createCGSnapshots(svm,voltargets,name,cg=True,label=label,debug=debug)
+        else:
+            snapshots=createSnapshots(svm,voltargets,name,label=label,debug=debug)
         if not snapshots.go():
             userio.message("ERROR: " + snapshots.reason)
         else:
             userio.message("Success")
-            grid=[['Volume','Snapshot','Status']]
+            if cg:
+                grid=[['CG','Snapshot','Status']]
+            else:
+                grid=[['Volume','Snapshot','Status']]
             for volume in snapshots.success:
                 grid.append([volume,name,'Success'])
             for volume in snapshots.failed:
                 grid.append([volume,name,'Fail'])
             userio.grid(grid)
 
-elif myoptions['MODE'] == 'show':
-    if targettype=='VOL':
-        snapshots=getSnapshots(svm,volumes=volumes,name=name,debug=debug)
+elif myopts.mode == 'show':
+    if len(voltargets) > 0:
+        if cg:
+            snapshots=getCGSnapshots(svm,cgs=voltargets,cg=True,name=name,debug=debug)
+        else:
+            snapshots=getSnapshots(svm,volumes=voltargets,name=name,debug=debug)
         if not snapshots.go():
             userio.message("ERROR: " + snapshots.reason)
             sys.exit(1)
         else:
-            grid=[['Volume','Snapshot','Date']]
-            volumelist=list(snapshots.snapshots.keys())
-            volumelist.sort()
-            for volume in volumelist:
-                snapshotlist=sorted(snapshots.snapshots[volume]['ordered'],key=lambda x: int(x[1]))
-                for snapshot,epoch in snapshotlist:
-                    grid.append([volume,snapshot,snapshots.snapshots[volume]['snapshots'][snapshot]['createtime']])
+            if cg:
+                grid=[['CG','Parent','Volume','Snapshot','Date']]
+                cglist=list(snapshots.snapshots.keys())
+                cglist.sort()
+                for cgname in cglist:
+                    try:
+                        parentfield=snapshots.cgs[cgname]['parent']
+                    except:
+                        parentfield='-'
+                    volumelist=list(snapshots.snapshots[cgname]['volumes'].keys())
+                    volumelist.sort()
+                    for volume in volumelist:
+                        snapshotlist=sorted(snapshots.snapshots[cgname]['ordered'],key=lambda x: int(x[1]))
+                        for snapshot,epoch in snapshotlist:
+                            grid.append([cgname,parentfield,volume,snapshot,snapshots.snapshots[cgname]['snapshots'][snapshot]['createtime']])
+
+            else:
+                grid=[['Volume','Snapshot','Date']]
+                volumelist=list(snapshots.snapshots.keys())
+                volumelist.sort()
+                for volume in volumelist:
+                    snapshotlist=sorted(snapshots.snapshots[volume]['ordered'],key=lambda x: int(x[1]))
+                    for snapshot,epoch in snapshotlist:
+                        grid.append([volume,snapshot,snapshots.snapshots[volume]['snapshots'][snapshot]['createtime']])
             userio.grid(grid)

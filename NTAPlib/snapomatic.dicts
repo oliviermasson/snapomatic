@@ -1,0 +1,78 @@
+.volumes [NAME IS KEY]
+    uuid
+    name
+    size
+    aggrs
+    type
+    junction-path,
+    {svm}
+
+.svms [NAME IS KEY]
+    uuid
+    name
+    {volumes}
+
+.snapshots[NAME IS KEY]
+    name
+    uuid
+    date
+    epoch
+
+.cgsnapshots[NAME IS KEY]
+    name
+    uuid
+    date
+    epoch
+    volumes:{volumes}
+
+.snapshots[VOLUME NAME IS KEY] (normal)
+    uuid
+    snapshots: {.snapshots}
+
+.snapshots [CG NAME IS KEY]
+    uuid
+    snapshots: {.cgsnapshots}
+
+.cgs [CG NAME IS KEY]
+    uuid
+    parent
+    volumes: {volumes}
+    children: [VOLUME NAMES]
+
+.paths [PATH IS KEY]
+    path
+    fstype
+    mountpoint
+    device
+
+.lvm [KEY is (vgname,lvname)]
+    (vguuid,lvuuid)
+
+.vgs [NAME IS KEY]
+    name
+    uuid
+    lv : {lv}
+    pv : {pv}
+
+.lvs [NAME IS KEY]
+    name
+    uuid
+
+.pvs [NAME IS KEY]
+    name
+    uuid
+    lun: {lun}
+
+.luns [REALPATH IS KEY]
+    realpath
+    svm: {.svm}
+    uuid
+    name
+    volume: {volumes}
+
+.svm [SVM NAME IS KEY]
+    name
+    uuid
+
+.nfs [DEVICE TUPLE]
+    volumes: {volumes}
