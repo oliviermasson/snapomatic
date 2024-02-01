@@ -1,0 +1,221 @@
+#! /usr/bin/python3
+
+import sys
+pythonversion=sys.version_info
+if pythonversion[0] != 3 or (pythonversion[1] < 6 or pythonversion[1] > 11):
+    userio.message("This script requires Python 3.6 through 3.11")
+    sys.exit(1)
+sys.path.append(sys.path[0] + "/NTAPlib")
+import userio
+from getSnapmirror import getSnapmirror
+from getSnapshots import getSnapshots
+from getLUNs import getLUNs
+from cloneVolumes import cloneVolumes
+from mapLUNs import mapLUNs
+import time
+import getopt
+
+snapomaticversion='DEV'
+
+validoptions={'target':'multistr',
+              'igrouptoken':'int',
+              'snapshot_prefix':'str',
+              'igroupname':'str',
+              'split':'bool',
+              'nosleep':'bool',
+              'debug':'bool',
+              'restdebug':'bool',
+              'recoverypoint':'timestamp',
+              'after':'bool',
+              'before':'bool'}
+
+requiredoptions=['target','igrouptoken']
+mutex=[['after','before']]
+
+usage="Version " + snapomaticversion + "\n" + \
+      "clone4DR --target\n" + \
+      "          (name of target svm and volumes)\n" + \
+      "          (syntax: svm volume or svm volume/lun, wildcards accepted)\n\n" + \
+      "          --snapshot_prefix\n" + \
+      "          (optionally restrict search to snapshots with a prefix_ syntax)\n" + \
+      "          --igrouptoken\n" + \
+      "          (identifies the _ delimited position of the igroup)\n\n" + \
+      "          --recoverypoint\n" + \
+      "          (recovery timestamp in YYYY-MM-DDTHH:MM:SS+ZZZZ)\n\n" + \
+      "          --after|--before\n" + \
+      "          (used with --recoverypoint)\n" + \
+      "          (look for snapshots before|after specified recoverypoint)\n" + \
+      "          (default behavior is AFTER)\n\n" + \
+      "          [--igroupname]\n" + \
+      "          (optionally specifies the igroup name, %=token\n\n" + \
+      "          [--split]\n" + \
+      "          (split the cloned volumes)\n\n" + \
+      "          [--debug]\n" + \
+      "          (show debug output)\n\n" + \
+      "          [--restdebug]\n" + \
+      "          (show REST API calls and responses)\n\n" 
+
+myopts=userio.validateoptions(sys.argv,validoptions,mutex=mutex,usage=usage,required=requiredoptions)
+
+svm=myopts.target[0]
+voltargets={}
+if len(myopts.target) == 1:
+    voltargets={'*':['*']}
+else:
+    for item in myopts.target[1:]:
+        pieces=item.split('/')
+        if pieces[0] not in voltargets.keys():
+            voltargets[pieces[0]] = []
+        if len(pieces) == 1:
+            voltargets[pieces[0]].append('*')
+        elif len(pieces) == 2:
+            voltargets[pieces[0]].append(pieces[1])
+        else:
+            userio.fail("Illegal format for target " + item)
+    for vol in voltargets.keys():
+        if len(voltargets[vol]) > 1 and '*' in voltargets[vol]:
+            userio.fail("Volume targets includes a volume/LUN pair and that same volume")
+
+
+igrouptoken=myopts.igrouptoken
+
+try:
+    recoverytarget=myopts.recoverypoint
+    if myopts.before:
+        recoverBefore=True
+    else:
+        recoverBefore=False
+except:
+    recoverytarget=False
+
+prefix=myopts.snapshot_prefix
+
+splitclones=myopts.split
+
+debug=0
+if myopts.debug:
+    debug=debug+1
+
+if myopts.restdebug:
+    debug=debug+2
+
+igroupname=myopts.igroupname
+
+nosleep=myopts.nosleep
+
+userio.linefeed()
+userio.message("Retrieving snapmirrored volumes...")
+snapmirror=getSnapmirror(svm,volumes=voltargets.keys(),debug=debug)
+if not snapmirror.go():
+    snapmirror.showDebug()
+if len(snapmirror.snapmirrorDestinations.keys()) < 1:
+    userio.fail("No matching snapmirrored volumes detected")
+
+clonelist=[]
+
+if len(snapmirror.snapmirrorDestinations[svm]['volumes'].keys()) > 0:
+    userio.message("Found matching snapmirrored volumes")
+else:
+    userio.fail("No matching snapmirrored volumes detected")
+for volume in snapmirror.snapmirrorDestinations[svm]['volumes'].keys():
+    userio.message(">> " + volume)
+    clonelist.append(volume)
+userio.message()
+
+userio.linefeed()
+userio.message("Retrieving snapshots...")
+snapshots=getSnapshots(svm,volumes=clonelist,debug=debug)
+if not snapshots.go():
+    snapshots.debug()
+
+for vol in clonelist:
+    if vol in snapshots.snapshots.keys():
+        userio.message("Most recent snapshot on volume " + vol + ":")
+        userio.message(">> " + snapshots.snapshots[vol]['recent'])
+    else:
+        userio.message("No matching snapshots found on volume " + vol)
+    userio.message()
+
+userio.linefeed()
+clonetargets={}
+userio.message("Verifying snapshot state matches requirements...")
+for vol in clonelist:
+    snapshot2clone=False
+    timestamp=False
+    if not recoverytarget:
+        snapshot2clone=snapshots.snapshots[vol]['recent']
+        userio.message("Volume " + vol + \
+              " most recent snapshot is " + \
+              snapshots.snapshots[vol]['snapshots'][recent]['date'])
+    else:
+        for x in range(0,len(snapshots.snapshots[vol]['ordered'])-1):
+            if recoverBefore:
+                if snapshots.snapshots[vol]['ordered'][x][1] > recoverytarget \
+                   and snapshots.snapshots[vol]['ordered'][x+1][1] < recoverytarget:
+                        timestamp=snapshots.snapshots[vol]['snapshots'][snapshots.snapshots[vol]['ordered'][x+1][0]]['epoch']
+                        snapshot2clone=snapshots.snapshots[vol]['ordered'][x+1][0]
+                        break
+            else:
+                if snapshots.snapshots[vol]['ordered'][x][1] > recoverytarget \
+                   and snapshots.snapshots[vol]['ordered'][x+1][1] < recoverytarget:
+                        timestamp=snapshots.snapshots[vol]['snapshots'][snapshots.snapshots[vol]['ordered'][x][0]]['epoch']
+                        snapshot2clone=snapshots.snapshots[vol]['ordered'][x][0]
+                        break
+        if snapshot2clone:
+            userio.message("Snapshot "+ vol + ":" + snapshot2clone + " with timestamp " + snapshots.snapshots[vol]['snapshots'][snapshot2clone]['date'] + " meets recovery target")
+            clonetargets[vol]=snapshots.snapshots[vol]['snapshots'][snapshot2clone]['uuid']
+        else:
+            userio.message("Unable to find snapshot matching requested recoverypoint")
+
+luns2clone=[]
+volumes2clone=[]
+userio.message("Retrieving LUNs from current volumes...")
+for volume in clonetargets.keys():
+    lunlist=[]
+    for lun in voltargets[volume]:
+        lunlist.append("/vol/" + volume + "/" + lun)
+    matchingluns=getLUNs(svm,lun=lunlist,debug=debug)
+    if not matchingluns.go():
+        userio.message("Unable to retrieve LUN list")
+        matchingluns.showDebug()
+        sys.exit(1)
+    else:
+        for lun in matchingluns.luns.keys():
+            userio.message(">> " + lun)
+            luns2clone.append(lun)
+            volumes2clone.append(lun.split('/')[2])
+
+volumes2clone=list(set(volumes2clone))
+
+userio.linefeed()
+userio.message("Cloning volumes...")
+clonecompleted=[]
+clonefailed=[]
+for vol in volumes2clone:
+    clone=cloneVolumes(svm,(vol,"failover_"+ vol,clonetargets[vol]),uuid=True,split=splitclones,debug=debug)
+    if not clone.go():
+        clone.showDebug()
+        clonefailed.append(vol)
+    else:
+        clonecompleted.append(vol + "failover_")
+userio.message()
+
+for lun in luns2clone:
+    lunpath=lun.split('/')
+    lunpath[2]='failover_' + lunpath[2]
+    lun=('/').join(lunpath)
+    igroupbase=lun.split('_')[igrouptoken]
+    if igroupname:
+        igroup=igroupname.replace('%',igroupbase)
+    else:
+        igroup=igroupbase
+    userio.message("Mapping " + lun + " to igroup " + igroup)
+    mapping=mapLUNs(svm,lun,igroup,debug=debug)
+    if not mapping.go():
+        mapping.showDebug()
+
+if not nosleep:
+    userio.message("Sleeping 10 seconds for LUN registration to complete")
+    time.sleep(10)
+    userio.message()
+

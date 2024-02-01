@@ -9,6 +9,7 @@ class getLUNs:
         self.stdout=None
         self.stderr=None
         self.svm=svm
+        self.volfilter=None
         self.lunfilter=None
         self.luns={}
         self.debug=False
@@ -33,10 +34,21 @@ class getLUNs:
                  'os_type,' + \
                  'status.state,' + \
                  '&svm.name=' + svm \
-    
-        if 'name' in kwargs.keys():
-            self.restargs = self.restargs + '&name=' + kwargs['name']
-            self.lunfilter=kwargs['name']
+        
+        if 'volume' in kwargs.keys():
+            self.volfilter=kwargs['volume']
+            self.restargs = self.restargs + '&name=/vol/' + kwargs['volume'] + "/*"
+        
+        if 'lun' in kwargs.keys():
+            self.lunfilter=kwargs['lun']
+            if type(self.lunfilter) is str:
+                self.restargs = self.restargs + '&name=' + self.lunfilter
+            elif type(self.lunfilter) is list:
+                self.restargs = self.restargs + '&name=' + ','.join(self.lunfilter)
+        
+        if self.volfilter and self.lunfilter:
+            print("Cannot pass both volume= and lun= to getLUNs")
+            sys.exit(1)
             
         if 'cache' in kwargs.keys():
             cache=True
@@ -61,9 +73,9 @@ class getLUNs:
 
         if self.debug & 1:
             userio.message("Retrieving LUNs from svm " + self.svm ,service=localapi + ":OP")
-            if self.lunfilter is not None:
-                userio.message("LUN search list: " + self.lunfilter,service=localapi + ":OP")
-        rest=doREST.doREST(self.svm,'get',self.api,restargs=self.restargs)
+            if self.vovollfilter is not None:
+                userio.message("LUN search list: " + self.volfilter,service=localapi + ":OP")
+        rest=doREST.doREST(self.svm,'get',self.api,debug=self.debug,restargs=self.restargs)
         if rest.result == 0:
             self.lunpath={}
             self.lunuuid={}
@@ -101,7 +113,7 @@ class getLUNs:
             self.result=1
             self.reason=rest.reason
             if self.debug:
-                self.showdebug()
+                self.showDebug()
             return(False)
                     
         self.result=0
