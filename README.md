@@ -30,7 +30,7 @@ You can initialize the file as follows:
 
 You can then add account information.
 
-== ONTAP Credentials
+## ONTAP Credentials
 
 ONTAP credentials are SVM-scoped. This helps avoid user errors. 
 
@@ -54,7 +54,7 @@ ONTAP credentials are SVM-scoped. This helps avoid user errors.
 
 The result is snapomatic now has credentials for an SVM called `jfsCloud4`, and it knows that this is the SVM providing data services on the four specified data interfaces. 
 
-= snapomatic.discover
+# snapomatic.discover
 
 This script users several of the NTAPlib modules to perform basic discovery. For example:
 
