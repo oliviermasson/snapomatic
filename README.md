@@ -54,4 +54,49 @@ ONTAP credentials are SVM-scoped. This helps avoid user errors.
 
 The result is snapomatic now has credentials for an SVM called `jfsCloud4`, and it knows that this is the SVM providing data services on the four specified data interfaces. 
 
+= snapomatic.discover
 
+This script users several of the NTAPlib modules to perform basic discovery. For example:
+
+    [root@jfs0 current]# ./snapomatic.discover /oradata0
+    PATH      MOUNTPOINT FS   VG LV PV SVM      EXPORT         VOLUME        LUN
+    --------- ---------- ---- -- -- -- -------- -------------- ------------- ---
+    /oradata0 /oradata0  nfs4          jfs_svm1 /jfs0_oradata0 jfs0_oradata0
+
+What happened here, is the script took the filesystem argument of `/oradata0`, discovered it was an NFS filesystem that originated at a LIF that was registered to the SVM called `jfs_svm1`, and it made a few RESTful calls to get information about this volume. It used `NTAPlib/discoverNFS.py` for most of the work. There's more information about this volume stored in the discoverNFS object too.
+
+Here's a slightly more advanced example:
+
+    [root@jfs0 current]# ./snapomatic.discover /myLV
+    PATH  MOUNTPOINT FS  VG   LV   PV                                            SVM      EXPORT VOLUME       LUN
+    ----- ---------- --- ---- ---- --------------------------------------------- -------- ------ ------------ ----
+    /myLV /myLV      xfs myVG myLV /dev/mapper/3600a0980383041327a2b55676c547173 jfs_svm1        jfs0_lvmtest LUN0
+                                   /dev/mapper/3600a0980383041327a2b55676c547174 jfs_svm1        jfs0_lvmtest LUN1
+                                   /dev/mapper/3600a0980383041327a2b55676c547175 jfs_svm1        jfs0_lvmtest LUN2
+
+In this case, the script discovered that /myLVM was an LVM-based filesystem. It then made a call to `NTAPlib/discoverLVM.py' which mapped this filesystem to its logical volume, and then to the volume group, and then to the underlying physical volumes. It then sent a specially formatted SCSI command to the LUN device backing the PV and ONTAP responded with identifying information.
+
+Finally, you can run this utility directly against the raw LUNs. This is useful for managing Oracle ASM or newly provisioned LUNs that are not yet part of a filesystem. 
+
+    [root@jfs0 current]# ./snapomatic.discover /dev/mapper/*
+    PATH                                          MOUNTPOINT FS    VG LV PV SVM      EXPORT VOLUME       LUN
+    --------------------------------------------- ---------- ----- -- -- -- -------- ------ ------------ ------
+    /dev/mapper/3600a0980383041327a2b55676c547173            block          jfs_svm1        jfs0_lvmtest LUN0
+    /dev/mapper/3600a0980383041327a2b55676c547174            block          jfs_svm1        jfs0_lvmtest LUN1
+    /dev/mapper/3600a0980383041327a2b55676c547175            block          jfs_svm1        jfs0_lvmtest LUN2
+    /dev/mapper/3600a0980383041334a3f55676c697278            block          jfs_svm1        lvm_convert  bigLUN
+    /dev/mapper/3600a0980383041334a3f55676c697279            block          jfs_svm1        lvm_convert  small0
+    /dev/mapper/3600a0980383041334a3f55676c69727a            block          jfs_svm1        lvm_convert  small1
+    /dev/mapper/3600a0980383041334a3f55676c697330            block          jfs_svm1        lvm_convert  small2
+    /dev/mapper/3600a0980383041334a3f55676c697331            block          jfs_svm1        lvm_convert  small3
+    /dev/mapper/3600a0980383041334a3f55676c697332            block          jfs_svm1        lvm_convert  small4
+    /dev/mapper/3600a0980383041334a3f55676c697333            block          jfs_svm1        lvm_convert  small5
+    /dev/mapper/3600a0980383041334a3f55676c697334            block          jfs_svm1        lvm_convert  small6
+    /dev/mapper/3600a0980383041334a3f55676c697335            block          jfs_svm1        lvm_convert  small7
+    /dev/mapper/bigVG-bigLV                                  block          jfs_svm1        lvm_convert  bigLUN
+    /dev/mapper/myVG-myLV                                    block          jfs_svm1        jfs0_lvmtest LUN0
+    /dev/mapper/rhel-root                         ?          ?     ?  ?  ?  ?        ?      ?            ?
+    /dev/mapper/rhel-swap                         ?          ?     ?  ?  ?  ?        ?      ?            ?
+    /dev/mapper/control                           ?          ?     ?  ?  ?  ?        ?      ?            ?
+    
+Most of these LUNs were identified as being ONTAP-hosted LUNs. Some of them are unknown. In this case, they are VMware virtual LUNs or 
