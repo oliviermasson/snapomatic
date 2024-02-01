@@ -54,11 +54,41 @@ ONTAP credentials are SVM-scoped. This helps avoid user errors.
 
 The result is snapomatic now has credentials for an SVM called `jfsCloud4`, and it knows that this is the SVM providing data services on the four specified data interfaces. 
 
+# debugging
+
+Most of the scripts include flags for --debug and --restdebug. The --debug flag will print details of the modules behavior and stdin/stdout. The --restdebug will show the REST conversations between the host and ONTAP system.
+
+# The --target argument
+
+Many scripts require the user to specify an target. The syntax for a target is one of the following, depending on the command:
+
+* svm volume [volume]
+* svm cg-name
+* path to a file
+* path to a LUN
+
+# snapomatic.destroyVolume
+
+This script does what it implies - it destroys a volume. There are no safeties. It will destroy the volume if the user credentials allow it. 
+
+    [root@jfs0 current]# ./snapomatic.destroyVolume
+    ERROR: Version dev
+              --target
+              (svm volume)
+    
+              [--debug]
+              (show debug output)
+    
+              [--restdebug]
+              (show REST API calls and responses)
+
+The script itself is basically a wrapper around the `NTAPlib/destroyVolumes.py` module. 
+
 # snapomatic.discover
 
 This script users several of the NTAPlib modules to perform basic discovery. For example:
 
-    [root@jfs0 current]# ./snapomatic.discover /oradata0
+    [root@jfs0 current]# ./snapomatic.discover --target /oradata0
     PATH      MOUNTPOINT FS   VG LV PV SVM      EXPORT         VOLUME        LUN
     --------- ---------- ---- -- -- -- -------- -------------- ------------- ---
     /oradata0 /oradata0  nfs4          jfs_svm1 /jfs0_oradata0 jfs0_oradata0
@@ -67,7 +97,7 @@ What happened here, is the script took the filesystem argument of `/oradata0`, d
 
 Here's a slightly more advanced example:
 
-    [root@jfs0 current]# ./snapomatic.discover /myLV
+    [root@jfs0 current]# ./snapomatic.discover --target /myLV
     PATH  MOUNTPOINT FS  VG   LV   PV                                            SVM      EXPORT VOLUME       LUN
     ----- ---------- --- ---- ---- --------------------------------------------- -------- ------ ------------ ----
     /myLV /myLV      xfs myVG myLV /dev/mapper/3600a0980383041327a2b55676c547173 jfs_svm1        jfs0_lvmtest LUN0
@@ -78,7 +108,7 @@ In this case, the script discovered that /myLVM was an LVM-based filesystem. It 
 
 Finally, you can run this utility directly against the raw LUNs. This is useful for managing Oracle ASM or newly provisioned LUNs that are not yet part of a filesystem. 
 
-    [root@jfs0 current]# ./snapomatic.discover /dev/mapper/*
+    [root@jfs0 current]# ./snapomatic.discover --target /dev/mapper/*
     PATH                                          MOUNTPOINT FS    VG LV PV SVM      EXPORT VOLUME       LUN
     --------------------------------------------- ---------- ----- -- -- -- -------- ------ ------------ ------
     /dev/mapper/3600a0980383041327a2b55676c547173            block          jfs_svm1        jfs0_lvmtest LUN0
@@ -99,4 +129,38 @@ Finally, you can run this utility directly against the raw LUNs. This is useful 
     /dev/mapper/rhel-swap                         ?          ?     ?  ?  ?  ?        ?      ?            ?
     /dev/mapper/control                           ?          ?     ?  ?  ?  ?        ?      ?            ?
     
-Most of these LUNs were identified as being ONTAP-hosted LUNs. Some of them are unknown. In this case, they are VMware virtual LUNs or 
+Most of these LUNs were identified as being ONTAP-hosted LUNs. Some of them are unknown. In this case, they are VMware virtual LUNs.
+
+# snapomatic.volume
+
+This script is a wrapper around `NTAPlib/getVolume.py`. As with other scripts, there is a lot more information in the getVolume object. The wrapper shows the basics.
+
+    [root@jfs0 current]# ./snapomatic.volume show --target jfs_svm1 jfs0_oradata0
+    VOLUME        SIZE (GB) AGGREGATE
+    ------------- --------- ------------------
+    jfs0_oradata0 256000.0  rtp_a700s_01_SSD_1
+
+Wildcards are also supported. Make sure you enclose the arguments in quotes or the shell will expand them. 
+
+    [root@jfs0 current]# ./snapomatic.volume show --target jfs_svm1 'jfs0_*'
+    VOLUME        SIZE (GB) AGGREGATE
+    ------------- --------- ------------------
+    jfs0_arch     102400.0  rtp_a700s_01_SSD_1
+    jfs0_lvmtest  20480.0   rtp_a700s_01_SSD_1
+    jfs0_orabin   73728.0   rtp_a700s_01_SSD_1
+    jfs0_oradata0 256000.0  rtp_a700s_01_SSD_1
+    jfs0_oradata1 256000.0  rtp_a700s_02_SSD_1
+    jfs0_oradata2 256000.0  rtp_a700s_01_SSD_1
+    jfs0_oradata3 256000.0  rtp_a700s_02_SSD_1
+    jfs0_oratmp0  102400.0  rtp_a700s_01_SSD_1
+    jfs0_oratmp1  102400.0  rtp_a700s_02_SSD_1
+    jfs0_redo0    10240.0   rtp_a700s_01_SSD_1
+    jfs0_redo1    10240.0   rtp_a700s_02_SSD_1
+
+You can clone a volume
+
+    [root@jfs0 current]# ./snapomatic.volume clone --target jfs_svm1 jfs0_oradata0 --name newclone
+    Cloned newclone from jfs0_oradata0
+
+
+
