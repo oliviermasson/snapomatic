@@ -1,6 +1,6 @@
 # Introduction
 
-Snapomatic is a collection of python utilities to perform useful things using ONTAP REST calls on a linux OS. It does not use any components other than Python and standard OS commands.
+Snapomatic is a collection of python utilities to perform useful things using ONTAP REST calls on a linux OS. It does not use any components other than Python and standard OS commands. These scripts were written by a longtime sysadmin with no programming education, just an interest in reliably automating as much work as possible.
 
 The primary scripts are located in the NTAP directory. Many of them are extremely similar. Their function is to perform a RESTful operation and store the data in python lists and dictionaries. NetApp offers a python SDK for REST as well. The difference between that code and snapomatic is snapomatic is intended to be expanded.
 
@@ -67,9 +67,11 @@ Many scripts require the user to specify an target. The syntax for a target is o
 * path to a file
 * path to a LUN
 
+**Not all target types are fully supported. I'm adding them incrementally**
+
 # snapomatic.destroyVolume
 
-This script does what it implies - it destroys a volume. There are no safeties. It will destroy the volume if the user credentials allow it. 
+This script does what it implies - it destroys a volume. There are no safeties. It will destroy the volume if the user credentials allow it. The volume will still be available in the recover-queue until expired.
 
     [root@jfs0 current]# ./snapomatic.destroyVolume
     ERROR: Version dev
@@ -133,7 +135,7 @@ Most of these LUNs were identified as being ONTAP-hosted LUNs. Some of them are 
 
 # snapomatic.volume
 
-This script is a wrapper around `NTAPlib/getVolume.py`. As with other scripts, there is a lot more information in the getVolume object. The wrapper shows the basics.
+This script is a wrapper around `NTAPlib/getVolumes.py`, `NTAPlib/cloneVolumes.py`, and `NTAPlib/createSnapshots.py`. As with other scripts, there is a lot more information in the getVolume object. The wrapper shows the basics.
 
     [root@jfs0 current]# ./snapomatic.volume show --target jfs_svm1 jfs0_oradata0
     VOLUME        SIZE (GB) AGGREGATE
@@ -157,10 +159,60 @@ Wildcards are also supported. Make sure you enclose the arguments in quotes or t
     jfs0_redo0    10240.0   rtp_a700s_01_SSD_1
     jfs0_redo1    10240.0   rtp_a700s_02_SSD_1
 
-You can clone a volume
+You can clone a volume too.
 
     [root@jfs0 current]# ./snapomatic.volume clone --target jfs_svm1 jfs0_oradata0 --name newclone
     Cloned newclone from jfs0_oradata0
+
+I'll destroy it before I forget it's there.
+
+    [root@jfs0 current]# ./snapomatic.destroyVolume --target jfs_svm1 newclone
+    Destroyed jfs_svm1:newclone
+
+# snapomatic.snapshot
+
+This script is a wrapper around various `NTAPlib/` modules.
+
+For example, I can view the snapshots like this:
+
+    [root@jfs0 current]# ./snapomatic.snapshot show --target jfs_svm1 jfs0_oradata0
+    VOLUME        SNAPSHOT                           DATE
+    ------------- ---------------------------------- -------------------------
+    jfs0_oradata0 clone_newclone.2024-02-01_204436.0 2024-02-01T20:44:36+00:00
+
+**Note: This only reports regular snapshots, not CG snapshots. 
+
+This could easily be done on the ONTAP CLI too. The point of this script is not to demonstrate how to script such a basic option, the point is to lead you to  understand how the ability to retrieve snapshots via Python can be incorporated into other scripts with more advanced workflows.
+
+If I wanted to view CG snapshots, I need to use the `--target svm cg-name` syntax.
+    
+    [root@jfs0 current]# ./snapomatic.snapshot show --target jfs_svm1 jfs0 --cg 
+    CG   PARENT VOLUME        SNAPSHOT                                                    DATE
+    jfs0        jfs0_arch     every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1921 2024-02-01T19:21:00+00:00
+    jfs0        jfs0_arch     every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1931 2024-02-01T19:31:00+00:00
+    jfs0        jfs0_orabin   every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1921 2024-02-01T19:21:00+00:00
+    jfs0        jfs0_orabin   every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1931 2024-02-01T19:31:00+00:00
+    jfs0        jfs0_oradata0 every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1921 2024-02-01T19:21:00+00:00
+    jfs0        jfs0_oradata0 every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1931 2024-02-01T19:31:00+00:00
+    jfs0        jfs0_oradata1 every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1921 2024-02-01T19:21:00+00:00
+    jfs0        jfs0_oradata1 every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1931 2024-02-01T19:31:00+00:00
+    jfs0        jfs0_oradata2 every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1921 2024-02-01T19:21:00+00:00
+    jfs0        jfs0_oradata2 every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1931 2024-02-01T19:31:00+00:00
+    jfs0        jfs0_oradata3 every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1921 2024-02-01T19:21:00+00:00
+    jfs0        jfs0_oradata3 every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1931 2024-02-01T19:31:00+00:00
+    jfs0        jfs0_oratmp0  every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1921 2024-02-01T19:21:00+00:00
+    jfs0        jfs0_oratmp0  every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1931 2024-02-01T19:31:00+00:00
+    jfs0        jfs0_oratmp1  every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1921 2024-02-01T19:21:00+00:00
+    jfs0        jfs0_oratmp1  every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1931 2024-02-01T19:31:00+00:00
+    jfs0        jfs0_redo0    every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1921 2024-02-01T19:21:00+00:00
+    jfs0        jfs0_redo0    every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1931 2024-02-01T19:31:00+00:00
+    jfs0        jfs0_redo1    every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1921 2024-02-01T19:21:00+00:00
+    jfs0        jfs0_redo1    every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1931 2024-02-01T19:31:00+00:00
+
+
+
+
+
 
 
 
