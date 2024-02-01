@@ -137,6 +137,8 @@ Most of these LUNs were identified as being ONTAP-hosted LUNs. Some of them are 
 
 This script is a wrapper around `NTAPlib/getVolumes.py`, `NTAPlib/cloneVolumes.py`, and `NTAPlib/createSnapshots.py`. As with other scripts, there is a lot more information in the getVolume object. The wrapper shows the basics.
 
+## show
+
     [root@jfs0 current]# ./snapomatic.volume show --target jfs_svm1 jfs0_oradata0
     VOLUME        SIZE (GB) AGGREGATE
     ------------- --------- ------------------
@@ -159,6 +161,8 @@ Wildcards are also supported. Make sure you enclose the arguments in quotes or t
     jfs0_redo0    10240.0   rtp_a700s_01_SSD_1
     jfs0_redo1    10240.0   rtp_a700s_02_SSD_1
 
+## clone
+
 You can clone a volume too.
 
     [root@jfs0 current]# ./snapomatic.volume clone --target jfs_svm1 jfs0_oradata0 --name newclone
@@ -172,6 +176,67 @@ I'll destroy it before I forget it's there.
 # snapomatic.snapshot
 
 This script is a wrapper around various `NTAPlib/` modules.
+
+    [root@jfs0 current]# ./snapomatic.snapshot
+    ERROR: Version DEV
+    snapshot show
+            [--target]
+            (svm [filesystem, LUN, or volume]
+    
+            (Optional. Name for snapshot. Wildcards accepted.)
+    
+            [--cg]
+            (Restrict search to CG snapshots. Wildcards accepted.)
+    
+            [--debug]
+            (show debug output)
+    
+            [--restdebug]
+            (show REST API debug output)
+    
+    snapshot create
+            [--target]
+            (svm [filesystem, CG, LUN, or volume]
+    
+            [--name||prefix]
+            (Name or prefix for snapshot)
+    
+            [--label|]
+            (Snapmirror label for the snapshot)
+    
+            [--cg]
+            (Create CG snapshots.)
+    
+            [--debug]
+            (show debug output)
+    
+            [--restdebug]
+            (show REST API debug output)
+    
+    snapshot delete
+            [--target]
+            (svm [filesystem, LUN, or volume]
+    
+            [--name]
+            (Optional. Name of snapshot. Wildcards accepted)
+    
+            [--maxcount]
+            (Optional. Maximum number of snapshots to retain)
+    
+            [--maxage]
+            (Optional. Maximum age of snapshots to retain.
+            (Accepts d[ays]/h[ours]/m[inutes]/[s]econds
+    
+            [--force]
+            (Override all safeguards)
+    
+            [--debug]
+            (show debug output)
+    
+            [--restdebug]
+            (show REST API debug output)
+
+## show
 
 For example, I can view the snapshots like this:
 
@@ -209,7 +274,49 @@ If I wanted to view CG snapshots, I need to use the `--target svm cg-name` synta
     jfs0        jfs0_redo1    every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1921 2024-02-01T19:21:00+00:00
     jfs0        jfs0_redo1    every5_c1af0dc4-6143-11ee-ae6e-00a098f7d731.2024-02-01_1931 2024-02-01T19:31:00+00:00
 
+## create
 
+Creation of snapshot is similarly intutive. Here's creation of five snapshots, `test0`, `test1`, `test2`, `test3` and `test4`
+
+    [root@jfs0 current]# ./snapomatic.snapshot create --target jfs_svm1 jfs0_oradata0 --name test0
+    Success
+    VOLUME        SNAPSHOT STATUS
+    ------------- -------- -------
+    jfs0_oradata0 test0    Success
+    [root@jfs0 current]# ./snapomatic.snapshot create --target jfs_svm1 jfs0_oradata0 --name test1
+    Success
+    VOLUME        SNAPSHOT STATUS
+    ------------- -------- -------
+    jfs0_oradata0 test1    Success
+    [root@jfs0 current]# ./snapomatic.snapshot create --target jfs_svm1 jfs0_oradata0 --name test2
+    Success
+    VOLUME        SNAPSHOT STATUS
+    ------------- -------- -------
+    jfs0_oradata0 test2    Success
+    [root@jfs0 current]# ./snapomatic.snapshot create --target jfs_svm1 jfs0_oradata0 --name test3
+    Success
+    VOLUME        SNAPSHOT STATUS
+    ------------- -------- -------
+    jfs0_oradata0 test3    Success
+    [root@jfs0 current]# ./snapomatic.snapshot create --target jfs_svm1 jfs0_oradata0 --name test4
+    Success
+    VOLUME        SNAPSHOT STATUS
+    ------------- -------- -------
+    jfs0_oradata0 test4    Success
+
+## delete
+
+I can also delete snapshots based on age or count. For example, I just created 5 snapshots with a name of `snapshot*`.
+
+I can delete those snapshots (wildcards supported) using a maxcount of 4:
+
+    [root@jfs0 current]# ./snapomatic.snapshot delete --target jfs_svm1 jfs0_oradata0 --name 'test*' --maxcount 4
+    Success
+    VOLUME        SNAPSHOT STATUS
+    ------------- -------- -------
+    jfs0_oradata0 test0    Deleted
+
+The `test0` snapshot was the oldest snapshot, which is why it was deleted. The youngest 4 snapshots were retained.
 
 
 
