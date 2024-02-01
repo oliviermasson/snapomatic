@@ -11,15 +11,16 @@ import userio
 
 snapomaticversion='dev'
 
-validoptions={'debug':'bool', \
+validoptions={'target':'multistr',
+              'debug':'bool', \
               'restdebug':'bool'}
 
 usage="Version " + snapomaticversion + "\n" + \
-      "discover [filesystem or LUN]\n" + \
+      "discover --target [filesystem or LUN]\n" + \
       "        [--debug]\n" + \
-      "        (show debug output)\n\n"
+      "        (show debug output)\n"
 
-myopts=userio.validateoptions(sys.argv,validoptions,acceptpaths=True,usage=usage)
+myopts=userio.validateoptions(sys.argv,validoptions,usage=usage)
 
 debug=0
 if myopts.debug:
@@ -27,7 +28,7 @@ if myopts.debug:
 if myopts.restdebug:
     debug=debug+2
 
-mypaths=discoverPaths.discoverPaths(myopts.paths,debug=debug)
+mypaths=discoverPaths.discoverPaths(myopts.target,debug=debug)
 mypaths.go()
 
 paths=list(mypaths.paths.keys())

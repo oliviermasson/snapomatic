@@ -28,7 +28,7 @@ def checkdate(field):
         truevalue=datetime.datetime.strptime(field,timeformat).timestamp()
         return(truevalue)
     except:
-        msg = "Format for " + field + " does not match YYYY.MM.DDTHH:MM:SS[TZ]"
+        msg = "Format for " + field + " does not match YYYY-MM-DDTHH:MM:SS[TZ]"
         raise argparse.ArgumentTypeError(msg)
 
 def validateoptions(sysargs,validoptions,**kwargs):
