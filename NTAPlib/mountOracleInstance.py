@@ -6,7 +6,7 @@ import getOwner
 import userio
 import doSqlplus
 
-class startOracleInstance:
+class mountOracleInstance:
 
     def __init__(self,sid,**kwargs):
         self.result=None
@@ -42,7 +42,7 @@ class startOracleInstance:
         if not home.go():
             self.result=home.result
             self.reason=home.reason
-            return
+            return(False)
         else:
             self.home=home.home
             self.base=home.base
@@ -60,13 +60,9 @@ class startOracleInstance:
 
         delim=userio.randomtoken()
 
+        cmd="alter database mount;"
 
-        if self.start is None:
-            cmd='startup;'
-        else:
-            cmd='startup ' + self.start + ';'
-
-        out=doSqlplus.doSqlplus(self.sid,cmd,user=self.user,home=self.home,base=self.base,debug=self.debug)
+        out=doSqlplus.doSqlplus(self.sid,cmd,user=self.user,home=self.home,base=self.base,feedback=True,debug=self.debug)
         if out.result > 0:
             self.result=1
             if out.reason is None:
@@ -78,17 +74,7 @@ class startOracleInstance:
             return(False)
         else:
             for line in out.stdout:
-                if line == 'Database opened.' and self.start is None:
-                    self.result=0
-                    self.stdout=out.stdout
-                    self.stderr=out.stderr
-                    return(True)
-                elif line == 'Database mounted.' and self.start=="mount":
-                    self.result=0
-                    self.stdout=out.stdout
-                    self.stderr=out.stderr
-                    return(True)
-                elif line[-24:] == 'ORACLE instance started.' and self.start=="nomount":
+                if line == 'Database altered.':
                     self.result=0
                     self.stdout=out.stdout
                     self.stderr=out.stderr
