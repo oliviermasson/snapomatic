@@ -19,6 +19,8 @@ class discoverLUN:
         self.size=None
         self.blocksize=None
         self.protocol=None
+        self.wwid=None
+        self.mdalias=None
         self.debug=False
 
         self.apibase=self.__class__.__name__
@@ -134,10 +136,23 @@ class discoverLUN:
             lunsize=totalblocks * blocksize
             self.size=int(lunsize)
             self.blocksize=blocksize
+
+            multipathcmd=doProcess.doProcess("/usr/sbin/multipath -ll " + self.device,debug=self.debug)
+            if multipathcmd.result > 0:
+                self.reason="Cannot execute /usr/bin/multipath"
+                self.error=1
+                self.stderr=multipathcmd.stderr
+                return(False)
+            
+            wwid,alias = multipathcmd.stdout[0].split()[:2]
+            self.wwid=wwid
+            self.mdalias=alias
+
         else:
             result=1
             self.reason="LUN is not a NetApp LUN"
             return(False)
+
 
         self.result=0
         if self.debug & 1:

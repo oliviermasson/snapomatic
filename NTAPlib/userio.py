@@ -87,7 +87,7 @@ def validateoptions(sysargs,validoptions,**kwargs):
 
     for option in validoptions.keys():
         if type(option) is str:
-            if option in requiredoptions:
+            if requiredoptions and option in requiredoptions:
                 requirement=True
             else:
                 requirement=False
