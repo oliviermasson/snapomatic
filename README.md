@@ -8,6 +8,18 @@ You will also find some implementations of those NTAPlib modules in the root dir
 
 You can run one of those "snapomatic.*" commands with no arguments and see syntax guidance. Some utilities must be run as root because they perform root-level storage operations. 
 
+The key to these scripts is the debug option
+
+## --debug
+
+The example scripts accept a --debug argument to print more information about what's happening in the workflow. They also may print the OS commands being executed and display the stdin and stdout. 
+
+## --restdebug
+
+The --restdebug argument is especially useful for anyone looking to automate REST. This flag will display the REST converation, including API calls, JSON, arguments, and responses. It will also show you the polling calls for those APIs that are not synchronous. You can use this information in your own scripts, whether you're using Python, Java, or even basic curl.
+
+# Note
+
 This is a work in progress. If you have questions, please open an Issue and I'll see what I can do to help. 
 
 # Credentials
@@ -71,7 +83,10 @@ Many scripts require the user to specify an target. The syntax for a target is o
 
 # snapomatic.destroyVolume
 
-This script does what it implies - it destroys a volume. There are no safeties. It will destroy the volume if the user credentials allow it. The volume will still be available in the recover-queue until expired.
+This script is a wrapped that illustrates how to use NTAPlib/destroyVolumes.py 
+
+It does what it implies - it destroys a volume. There are no safeties. It will destroy the volume if the user credentials allow it. The volume will still be available in the recover-queue until expired.
+
 
     [root@jfs0 current]# ./snapomatic.destroyVolume
     ERROR: Version dev
@@ -106,9 +121,9 @@ Here's a slightly more advanced example:
                                    /dev/mapper/3600a0980383041327a2b55676c547174 jfs_svm1        jfs0_lvmtest LUN1
                                    /dev/mapper/3600a0980383041327a2b55676c547175 jfs_svm1        jfs0_lvmtest LUN2
 
-In this case, the script discovered that /myLVM was an LVM-based filesystem. It then made a call to `NTAPlib/discoverLVM.py' which mapped this filesystem to its logical volume, and then to the volume group, and then to the underlying physical volumes. It then sent a specially formatted SCSI command to the LUN device backing the PV and ONTAP responded with identifying information.
+In this case, the script discovered that /myLVM was an LVM-based filesystem. It then made a call to `NTAPlib/discoverLVM.py' which mapped this filesystem to its logical volume, and then to the volume group, and then to the underlying physical volumes. It then used NTAPlib/discoverLUN.py to send a specially formatted SCSI command to the LUN device backing the PV and ONTAP responded with identifying information.
 
-Finally, you can run this utility directly against the raw LUNs. This is useful for managing Oracle ASM or newly provisioned LUNs that are not yet part of a filesystem. 
+Finally, you can run this utility directly against the raw LUNs. This is useful for managing Oracle ASM or newly provisioned LUNs that are not yet part of a filesystem. This script leverages NTAPlib/discoverLUN.py to probe the LUN itself for data. 
 
     [root@jfs0 current]# ./snapomatic.discover --target /dev/mapper/*
     PATH                                          MOUNTPOINT FS    VG LV PV SVM      EXPORT VOLUME       LUN
@@ -318,8 +333,18 @@ I can delete those snapshots (wildcards supported) using a maxcount of 4:
 
 The `test0` snapshot was the oldest snapshot, which is why it was deleted. The youngest 4 snapshots were retained.
 
+# snapomatic.splitClone
+
+This is a wrapper for NTAPlib/splitClones.py.
 
 
 
 
 
+# NTAPlib module debug settings
+
+0000 0001 | Show basic workflow information
+0000 0010 | Show REST output performed by doREST.py
+0000 0100 | Show extra workflow steps beyond just the basics
+0000 1000 | Show exec() calls including stdin/stdout performed by doProcess.py
+0001 0000 | Show sqlplus related information, mostly within doSqlplus.py and doRMAN.py

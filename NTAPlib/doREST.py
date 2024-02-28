@@ -25,7 +25,7 @@ class doREST():
         self.stdout=[]
         self.stderr=[]
         self.debug=0
-        self.synchronous=True
+        self.synchronous=False
         username=None
         password=None
 
@@ -136,7 +136,7 @@ class doREST():
         if self.debug & 2:
             self.showDebug()
 
-        if response.ok and self.result == 200:
+        if response.ok and (self.result == 200 or (self.synchronous == False and self.result == 202)):
             try:
                 convert2dict=response.json()
                 self.result=0

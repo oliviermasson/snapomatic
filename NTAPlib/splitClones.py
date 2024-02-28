@@ -91,8 +91,9 @@ class splitClones:
             if self.debug & 1:
                 message="Splitting clone " + self.svm + ":" + item
                 userio.message(message,service=localapi + ":OP")
-            rest=doREST.doREST(self.svm,'patch','/storage/volumes/' + uuid,json=json4rest,debug=self.debug)
+            rest=doREST.doREST(self.svm,'patch','/storage/volumes/' + uuid,synchronous=False,json=json4rest,debug=self.debug)
 
+            jobuuid=rest.response['job']['uuid']
             try:
                 jobuuid=rest.response['job']['uuid']
             except:
