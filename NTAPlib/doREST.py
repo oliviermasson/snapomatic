@@ -26,6 +26,7 @@ class doREST():
         self.stderr=[]
         self.debug=0
         self.synchronous=False
+        self.sleeptime=1
         username=None
         password=None
 
@@ -48,6 +49,9 @@ class doREST():
 
         if 'synchronous' in kwargs.keys():
             self.synchronous=kwargs['synchronous']
+
+        if 'sleeptime' in kwargs.keys():
+            self.sleeptime=kwargs['sleeptime']
 
         if 'username' in kwargs.keys():
             username=kwargs['username']
@@ -132,7 +136,7 @@ class doREST():
         self.result=response.status_code
         self.reason=response.reason
         self.response=response.text
-        
+
         if self.debug & 2:
             self.showDebug()
 
@@ -166,7 +170,7 @@ class doREST():
             
             running=True
             while running:
-                time.sleep(1)
+                time.sleep(self.sleeptime)
                 self.api="/cluster/jobs/" + jobuuid
                 self.url="https://" + self.mgmtaddr + "/api" + self.api
                 self.restargs=["fields=state,message"]
@@ -196,9 +200,12 @@ class doREST():
             if not self.result == 200:
                 self.result=1
                 self.reason="Job " + jobuuid + " failed"
+                return(False)
             elif not self.response['state'] == 'success':
                 self.result=1
+                return(False)
             else:
+                print("tock")
                 self.result=0
                 self.url=tmpurl
                 self.jsonin=tmpjsonin
