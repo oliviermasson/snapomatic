@@ -127,7 +127,7 @@ class getCGSnapshots:
                 if self.debug & 1:
                     userio.message("Retriving CG snapshots for CG " + cgname,service=localapi + ":OP")
                 rest=doREST.doREST(self.svm,'get',nextapi,restargs=self.cgrestargs,debug=self.debug)
-                if rest.result == 0:
+                if rest.result == 200:
                     for record in rest.response['records']:
                         uuid=record['uuid']
                         name=record['name']

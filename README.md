@@ -89,7 +89,6 @@ It does what it implies - it destroys a volume. There are no safeties. It will d
 
 
     [root@jfs0 current]# ./snapomatic.destroyVolume
-    ERROR: Version dev
               --target
               (svm volume)
     
@@ -121,7 +120,7 @@ Here's a slightly more advanced example:
                                    /dev/mapper/3600a0980383041327a2b55676c547174 jfs_svm1        jfs0_lvmtest LUN1
                                    /dev/mapper/3600a0980383041327a2b55676c547175 jfs_svm1        jfs0_lvmtest LUN2
 
-In this case, the script discovered that /myLVM was an LVM-based filesystem. It then made a call to `NTAPlib/discoverLVM.py' which mapped this filesystem to its logical volume, and then to the volume group, and then to the underlying physical volumes. It then used NTAPlib/discoverLUN.py to send a specially formatted SCSI command to the LUN device backing the PV and ONTAP responded with identifying information.
+In this case, the script discovered that /myLVM was an LVM-based filesystem. It then made a call to `NTAPlib/discoverLVM.py` which mapped this filesystem to its logical volume, and then to the volume group, and then to the underlying physical volumes. It then used NTAPlib/discoverLUN.py to send a specially formatted SCSI command to the LUN device backing the PV and ONTAP responded with identifying information.
 
 Finally, you can run this utility directly against the raw LUNs. This is useful for managing Oracle ASM or newly provisioned LUNs that are not yet part of a filesystem. This script leverages NTAPlib/discoverLUN.py to probe the LUN itself for data. 
 
@@ -193,7 +192,6 @@ I'll destroy it before I forget it's there.
 This script is a wrapper around various `NTAPlib/` modules.
 
     [root@jfs0 current]# ./snapomatic.snapshot
-    ERROR: Version DEV
     snapshot show
             [--target]
             (svm [filesystem, LUN, or volume]
@@ -339,7 +337,6 @@ The `test0` snapshot was the oldest snapshot, which is why it was deleted. The y
 This is a wrapper for `NTAPlib/splitClones.py`.
 
     [root@jfs0 current]# ./snapomatic.splitClones
-    ERROR: Version dev
               --target
               (svm volume)
     
@@ -441,7 +438,155 @@ This API returned a result code of 202, which means the call was accepted. The f
 
 When run without --synchronous, this script doesn't wait to check whether the operation completed, it only checked to see if the operation got to the point where it was running, as indicated by the "state" field by the response.
 
+# snapomatic.cloneSAN4DR
 
+This is a more complicated workflow created for a customer POC. It illustrates stringing together multiple modules. The full details will be covered in a future project, but the basic requirement was this:
+
+* The ability to select one or more snapmirrored volumes, and
+* Clone the volumes. Do NOT break the mirrors. This was required so DR can be tested without interrupting replication.
+* Create the clone of the target volumes to a timepoint that is immediately *after* or immediately *before* the desired recovery point. 
+* Map all LUNs
+
+This script works as follows:
+
+[root@jfs0 current]# ./snapomatic.cloneSAN4DR
+clone4DR --target
+          (name of target svm and volumes)
+          (syntax: svm volume or svm volume/lun, wildcards accepted)
+
+          --snapshot_prefix
+          (optionally restrict search to snapshots with a prefix_ syntax)
+          --igrouptoken
+          (identifies the _ delimited position of the igroup)
+
+          --recoverypoint
+          (recovery timestamp in YYYY-MM-DDTHH:MM:SS+ZZZZ)
+
+          --after|--before
+          (used with --recoverypoint)
+          (look for snapshots before|after specified recoverypoint)
+          (default behavior is AFTER)
+
+          [--igroupname]
+          (optionally specifies the igroup name, %=token
+
+          [--split]
+          (split the cloned volumes)
+
+          [--debug]
+          (show debug output)
+
+          [--restdebug]
+          (show REST API calls and responses)
+
+As an example, the command could be run like this:
+
+    [root@jfs0 current]# ./snapomatic.cloneSAN4DR --target jfs_dev2 'ora_DRcluster_*' \ 
+                                                  --recoverypoint 2024-02-20T12:30:00+0500 \
+                                                  --before \
+                                                  --igrouptoken 2
+
+The logic would then do this:
+
+1. Identify all snapmirrored volumes on `jfs_dev` matching the pattern `ora_DRcluster_*`
+2. Identify the snapshot immediately *before* the specified timestamp
+3. Create a clone of those volumes. It will prepend the string `failover_` to the clone name
+4. Because we are not breaking the mirrors, that clone will be created using the identified snapshot
+5. Enumerate all of the LUNs in the newly cloned volumes
+6. Extract the 2nd token of the original _ character delimted volume name to be used as the igroup name
+7. In this case, map the LUNs to the igroup "DRcluster" because that was the 2nd token in the volume name
+
+We also had a requirement to selectively clone only certain LUNs. As SnapMirror works on the volume level, we still clone all LUNs but only matching LUNs are mapped. The syntax for this operation is as follows:
+
+
+    [root@jfs0 current]# ./snapomatic.cloneSAN4DR --target jfs_dev2 'ora_DRcluster_*/LUN2' \ 
+                                                  --recoverypoint 2024-02-20T12:30:00+0500 \
+                                                  --before \
+                                                  --igrouptoken 2
+
+In this example, the script is looking for a volume/LUN pattern match of oraDRcluster_*/LUN2.
+
+As an example of running this at large scale, the following two commands could be run:
+
+
+    [root@jfs0 current]# ./snapomatic.cloneSAN4DR --target jfs_dev2 'ora_DRcluster_.*dbf' \ 
+                                                  --recoverypoint 2024-02-20T12:30:00+0500 \
+                                                  --before \
+                                                  --igrouptoken 2
+    
+    [root@jfs0 current]# ./snapomatic.cloneSAN4DR --target jfs_dev2 'ora_DRcluster_.*logs' \ 
+                                                  --recoverypoint 2024-02-20T12:30:00+0500 \
+                                                  --after \
+                                                  --igrouptoken 2
+
+The result of this two commands are the following LUNs, mapped, inside of cloned volumes. The LUNs in the `_dbf` volumes were cloned from a snapshot created *prior* to the desired recoverypoint, and the LUNS in the `_logs` volumes were cloned from a snapshot created immediately *after* the desired recoverypoint. This is the starting point for Oracle and most database recovery operations - you start with a copy of datafiles prior to the point-in-time recovery mark, and a copy of logs from after the PIT mark. You then replay logs to the desired point.
+
+    rtp-a700s-c02::> lun show -vserver jfs_dev2 -fields path /vol/fail*
+    vserver  path
+    -------- ----------------------------------------
+    jfs_dev2 /vol/failover_ora_DRcluster_BII_dbf/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_BII_dbf/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_BII_dbf/LUN2
+    jfs_dev2 /vol/failover_ora_DRcluster_BII_dbf/LUN3
+    jfs_dev2 /vol/failover_ora_DRcluster_BII_logs/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_BII_logs/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_CRM_dbf/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_CRM_dbf/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_CRM_dbf/LUN2
+    jfs_dev2 /vol/failover_ora_DRcluster_CRM_dbf/LUN3
+    jfs_dev2 /vol/failover_ora_DRcluster_CRM_logs/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_CRM_logs/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_DEV_dbf/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_DEV_dbf/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_DEV_dbf/LUN2
+    jfs_dev2 /vol/failover_ora_DRcluster_DEV_dbf/LUN3
+    jfs_dev2 /vol/failover_ora_DRcluster_DEV_logs/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_DEV_logs/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_DWH_dbf/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_DWH_dbf/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_DWH_dbf/LUN2
+    jfs_dev2 /vol/failover_ora_DRcluster_DWH_dbf/LUN3
+    jfs_dev2 /vol/failover_ora_DRcluster_DWH_logs/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_DWH_logs/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_ERP_dbf/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_ERP_dbf/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_ERP_dbf/LUN2
+    jfs_dev2 /vol/failover_ora_DRcluster_ERP_dbf/LUN3
+    jfs_dev2 /vol/failover_ora_DRcluster_ERP_logs/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_ERP_logs/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_FCST_dbf/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_FCST_dbf/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_FCST_dbf/LUN2
+    jfs_dev2 /vol/failover_ora_DRcluster_FCST_dbf/LUN3
+    jfs_dev2 /vol/failover_ora_DRcluster_FCST_logs/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_FCST_logs/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_HRS_dbf/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_HRS_dbf/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_HRS_dbf/LUN2
+    jfs_dev2 /vol/failover_ora_DRcluster_HRS_dbf/LUN3
+    jfs_dev2 /vol/failover_ora_DRcluster_HRS_logs/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_HRS_logs/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_SPC_dbf/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_SPC_dbf/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_SPC_dbf/LUN2
+    jfs_dev2 /vol/failover_ora_DRcluster_SPC_dbf/LUN3
+    jfs_dev2 /vol/failover_ora_DRcluster_SPC_logs/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_SPC_logs/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_TST_dbf/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_TST_dbf/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_TST_dbf/LUN2
+    jfs_dev2 /vol/failover_ora_DRcluster_TST_dbf/LUN3
+    jfs_dev2 /vol/failover_ora_DRcluster_TST_logs/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_TST_logs/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_UAT_dbf/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_UAT_dbf/LUN1
+    jfs_dev2 /vol/failover_ora_DRcluster_UAT_dbf/LUN2
+    jfs_dev2 /vol/failover_ora_DRcluster_UAT_dbf/LUN3
+    jfs_dev2 /vol/failover_ora_DRcluster_UAT_logs/LUN0
+    jfs_dev2 /vol/failover_ora_DRcluster_UAT_logs/LUN1
+    60 entries were displayed.
+    
+    
 # NTAPlib module debug settings
 
     0000 0001 | Show basic workflow information

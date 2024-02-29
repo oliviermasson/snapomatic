@@ -76,7 +76,7 @@ class createCGSnapshots:
                                '/application/consistency-groups/' + knowncgs.cgs[cg]['uuid'] + '/snapshots/?return_timeout=60', \
                                json=json4rest, \
                                debug=self.debug)
-            if rest.result == 0 and rest.reason=='Created':
+            if rest.result == 201 and rest.reason=='Created':
                 self.success.append(cg)
                 if self.debug & 1:
                     userio.message("Created CG snapshot " + self.snapshot + " on " + self.svm + ":" + cg,service=localapi + ":OP")

@@ -63,7 +63,7 @@ class discoverNFS:
             api='/storage/volumes'
             restargs='fields=size,uuid,aggregates,type,svm.name,svm.uuid,nas.path&nas.path=' + '|'.join(nfsservers[device])
             rest=doREST.doREST(device,'get',api,restargs=restargs,debug=self.debug)
-            if rest.result == 0:
+            if rest.result == 200:
                 restresponses[device]=rest.response
             else:
                 self.result=1

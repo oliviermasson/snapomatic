@@ -140,17 +140,25 @@ class doREST():
         if self.debug & 2:
             self.showDebug()
 
-        if response.ok and (self.result == 200 or (self.synchronous == False and self.result == 202)):
+        if not response.ok:
             try:
                 convert2dict=response.json()
-                self.result=0
+                self.response=convert2dict
+                return(True)
+            except Exception as e:
+                self.result=1
+                self.reason=e
+            return(False)
+        elif not self.synchronous and self.result == 202:
+            try:
+                convert2dict=response.json()
                 self.response=convert2dict
                 return(True)
             except Exception as e:
                 self.result=1
                 self.reason=e
                 return(False)
-        elif response.ok and self.result == 202:
+        elif self.synchronous and self.result == 202:
             tmpurl=self.url
             tmpjsonin=self.jsonin
             tmpapi=self.api
@@ -162,7 +170,6 @@ class doREST():
                 convert2dict=response.json()
                 jobuuid=convert2dict['job']['uuid']
             except:
-                self.result=1
                 self.reason="Unable to retrieve uuid for asynchronous operation"
                 if self.debug & 2:
                     self.showDebug()
@@ -181,7 +188,6 @@ class doREST():
                     jobrest=requests.get(self.url,auth=(username,password),verify=False)
                 
                 except Exception as e:
-                    self.result=1
                     self.reason=str(e)
                     return(False)
 
@@ -194,19 +200,16 @@ class doREST():
                 if self.debug & 2:
                     self.showDebug()
                 
-                if not self.result == 200 or not self.response['state'] == 'running':
+                if not self.result == 202 and not self.response['state'] == 'running':
                     running=False
                 
             if not self.result == 200:
-                self.result=1
                 self.reason="Job " + jobuuid + " failed"
                 return(False)
             elif not self.response['state'] == 'success':
                 self.result=1
                 return(False)
             else:
-                print("tock")
-                self.result=0
                 self.url=tmpurl
                 self.jsonin=tmpjsonin
                 self.api=tmpapi

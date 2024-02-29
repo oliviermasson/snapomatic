@@ -91,7 +91,7 @@ class createSnapshots:
                                '/storage/volumes/' +  matchingvolumes.volumes[volmatch]['uuid'] + '/snapshots?return_timeout=60', \
                                json=json4rest, \
                                debug=self.debug)
-            if rest.result == 0 and rest.reason=='Created':
+            if rest.result == 201 and rest.reason=='Created':
                 self.success.append(volmatch)
                 if self.debug & 1:
                     userio.message("Created snapshot " + self.snapshot + " on " + self.svm + ":" + volmatch,service=localapi + ":OP")

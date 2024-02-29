@@ -67,7 +67,7 @@ class destroyVolumes:
             time.sleep(1)
             jobrest=doREST.doREST(self.svm,'get','/cluster/jobs/' + jobuuid,restargs='fields=state,message',debug=self.debug)
         
-            if not jobrest.result == 0 or not jobrest.response['state'] == 'running':
+            if not jobrest.result == 202 and not jobrest.response['state'] == 'running':
                 running=False
 
 

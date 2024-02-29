@@ -161,7 +161,7 @@ class deleteCGSnapshots:
                                    '/application/consistency-groups/' + targetdata['uuid'] + '/snapshots/' + snapuuid + '?return_timeout=60', \
                                    debug=self.debug)
 
-                if rest.result == 0 and rest.reason=='OK':
+                if rest.result == 200 and rest.reason=='OK':
                     if target in self.deleted.keys():
                         self.deleted[target].append(snapname)
                     else:

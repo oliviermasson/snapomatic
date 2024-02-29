@@ -127,7 +127,7 @@ userio.linefeed()
 userio.message("Retrieving snapshots...")
 snapshots=getSnapshots(svm,volumes=clonelist,debug=debug)
 if not snapshots.go():
-    snapshots.debug()
+    snapshots.showDebug()
 
 for vol in clonelist:
     if vol in snapshots.snapshots.keys():

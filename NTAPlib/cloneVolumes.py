@@ -120,10 +120,10 @@ class cloneVolumes:
             while running:
                 time.sleep(1)
                 jobrest=doREST.doREST(self.svm,'get','/cluster/jobs/' + jobuuid,restargs='fields=state,message',debug=self.debug)
-                if not jobrest.result == 0 or not jobrest.response['state'] == 'running':
+                if not jobrest.result == 202 and not jobrest.response['state'] == 'running':
                     running=False
 
-            if jobrest.result > 0:
+            if not jobrest.result == 200:
                 self.result=1
                 self.reason="Failed to clone at least one volume"
                 self.stdout=self.stdout + jobrest.stdout
@@ -131,7 +131,6 @@ class cloneVolumes:
                 self.failed.append((item,'REST call failed'))
             elif not jobrest.response['state'] == 'success':
                 self.result=1
-                self.reason=jobrest.response['message']
                 self.stdout=self.stdout + jobrest.stdout
                 self.stdout=self.stdout + jobrest.stderr
                 self.failed.append((item,jobrest.response['message']))

@@ -78,7 +78,7 @@ class getCGs:
         localapi='->'.join([self.apicaller,self.apibase + ".go"])
 
         rest=doREST.doREST(self.svm,'get',self.api,restargs=self.restargs,debug=self.debug)
-        if rest.result == 0:
+        if rest.result == 200:
             for record in rest.response['records']:
                 svmname=record['svm']['name']
                 cgname=record['name']
