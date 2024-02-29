@@ -133,7 +133,7 @@ class doSqlplus:
             useraccount = kwargs['user']
             try:
                 checkuid = pwd.getpwnam(kwargs['user']).pw_uid
-                self.username=kwargs['user']
+                self.user=kwargs['user']
             except:
                 self.result=1
                 self.errorflag=1
@@ -190,12 +190,12 @@ class doSqlplus:
             commandblock.insert(0,'connect ' + self.username + "/" + self.password + "@" + self.sid + " as " + self.priv + "\n")
             connectstring=1
         
-        sqlpluscmd = doProcess.doProcess(cmdline, stdin=commandblock, displaystdin=connectstring,env=myenv, ssh=self.ssh, user=self.username, encoding='utf8',debug=self.debug)
+        sqlpluscmd = doProcess.doProcess(cmdline, stdin=commandblock, displaystdin=connectstring,env=myenv, ssh=self.ssh, user=self.user, encoding='utf8',debug=self.debug)
 
         self.result=sqlpluscmd.result
         self.stdout=sqlpluscmd.stdout
         self.stderr=sqlpluscmd.stderr
-    
+
         for line in self.stdout:
             if line[: 5] == 'ERROR' or line[:20] == 'ORACLE not available' or line[:9] == 'ORA-01034:':
                 self.result=0

@@ -14,6 +14,7 @@ from cloneVolumes import cloneVolumes
 from mapLUNs import mapLUNs
 import time
 import getopt
+import re
 
 snapomaticversion='DEV'
 
@@ -64,6 +65,7 @@ if len(myopts.target) == 1:
 else:
     for item in myopts.target[1:]:
         pieces=item.split('/')
+        print(pieces)
         if pieces[0] not in voltargets.keys():
             voltargets[pieces[0]] = []
         if len(pieces) == 1:
@@ -75,7 +77,6 @@ else:
     for vol in voltargets.keys():
         if len(voltargets[vol]) > 1 and '*' in voltargets[vol]:
             userio.fail("Volume targets includes a volume/LUN pair and that same volume")
-
 
 igrouptoken=myopts.igrouptoken
 
@@ -172,8 +173,19 @@ volumes2clone=[]
 userio.message("Retrieving LUNs from current volumes...")
 for volume in clonetargets.keys():
     lunlist=[]
-    for lun in voltargets[volume]:
-        lunlist.append("/vol/" + volume + "/" + lun)
+
+    for volpattern in voltargets.keys():
+        if volpattern == '*':
+            volpatternmatch=re.compile('^.*.$')
+        elif re.findall(r'[?*.^$]',volpattern):
+            volpatternmatch=re.compile(volpattern)
+        else:
+            volpatternmatch=re.compile('^' + volpattern + '$')
+
+        if re.match(volpatternmatch,volume):
+            for lun in voltargets[volpattern]:
+                lunlist.append("/vol/" + volume + "/" + lun)
+
     matchingluns=getLUNs(svm,lun=lunlist,debug=debug)
     if not matchingluns.go():
         userio.message("Unable to retrieve LUN list")
