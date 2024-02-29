@@ -1,0 +1,89 @@
+#! /usr/bin/python3
+import sys
+pythonversion=sys.version_info
+if pythonversion[0] != 3 or (pythonversion[1] < 6 or pythonversion[1] > 11):
+    print("This script requires Python 3.6 through 3.11")
+    sys.exit(1)
+sys.path.append(sys.path[0] + "/NTAPlib")
+import startOracleRAC
+import stopOracleRAC
+import discoverOracle
+import userio
+
+snapomaticversion='DEV'
+
+validoptions={'backup':    {'db':'multistr', \
+                            'stop':'bool',\
+                            'start':'bool',\
+                            'debug':'bool',\
+                            'force':'bool'},
+              'start' :    {'db':'multistr', \
+                            'mount': 'bool', \
+                            'nomount': 'bool', \
+                            'debug':'bool'},\
+              'stop' :     {'db':'multistr', \
+                            'debug':'bool',\
+                            'abort':'bool'},\
+              'open' :     {'db':'multistr', \
+                            'debug':'bool'},\
+              'mount' :    {'db':'multistr', \
+                            'debug':'bool'},\
+              'discover' : {'db':'str', \
+                            'debug':'bool'}}
+
+requiredoptions={'backup' : ['db',['start','stop']], \
+                 'start' : ['db'],\
+                 'stop' : ['db'],\
+                 'mount' : ['db'],\
+                 'open' : ['db'],\
+                 'discover' : ['db']}\
+
+mutex=[['mount','nomount']]
+
+usage="Version " + snapomaticversion + "\n" + \
+      "start    [--db]\n" + \
+      "         (name(s) of databases\n\n" + \
+      "         [--mount]\n" + \
+      "         (startup in mount mode)\n\n" \
+      "         [--nomount]\n" + \
+      "         (startup in nomount mode)\n\n" \
+      "         [--debug]\n" + \
+      "         (show debug output)\n\n" + \
+      "stop     [--db]\n" + \
+      "         (name(s) of databases\n\n" + \
+      "         [--abort]\n" + \
+      "         (perform shutdown abort. Default is shutdown immediate)\n\n" \
+      "         [--debug]\n" + \
+      "         (show debug output)\n"
+
+myopts=userio.validateoptions(sys.argv,validoptions,mutex=mutex,usage=usage,required=requiredoptions)
+
+dblist=myopts.db
+
+if myopts.debug:
+    debug=25
+else:
+    debug=0
+
+if myopts.mode == 'start':
+    if myopts.mount:
+        start='mount'
+    elif myopts.nomount:
+        start='nomount'
+    else:
+        start=None
+    for db in dblist:
+        change=startOracleRAC.startOracleRAC(db,start=start,debug=debug)
+        if change.go():
+            userio.message("Success: " + db + " started")
+        else:
+            userio.warn(change.reason)
+
+if myopts.mode == 'stop':
+    abort=myopts.abort
+    for db in dblist:
+        change=stopOracleRAC.stopOracleRAC(db,abort=abort,debug=debug)
+        if change.go():
+            userio.message("Success: " + db + " stopped")
+        else:
+            userio.warn(change.reason)

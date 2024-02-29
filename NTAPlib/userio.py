@@ -70,7 +70,10 @@ def validateoptions(sysargs,validoptions,**kwargs):
 
     if 'required' in kwargs.keys():
         if modal:
-            requiredoptions=kwargs['required'][mode]
+            try:
+                requiredoptions=kwargs['required'][mode]
+            except:
+                fail("Please specify mode: " + '|'.join(list(kwargs['required'].keys())))
         else:
             requiredoptions=kwargs['required']
         for option in requiredoptions:

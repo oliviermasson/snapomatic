@@ -2,7 +2,6 @@ import sys
 sys.path.append(sys.path[0] + "/NTAPlib")
 import os
 import getOracleHome
-import getOwner
 import userio
 import doSqlplus
 
