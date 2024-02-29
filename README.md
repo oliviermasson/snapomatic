@@ -333,12 +333,113 @@ I can delete those snapshots (wildcards supported) using a maxcount of 4:
 
 The `test0` snapshot was the oldest snapshot, which is why it was deleted. The youngest 4 snapshots were retained.
 
+
 # snapomatic.splitClone
 
-This is a wrapper for NTAPlib/splitClones.py.
+This is a wrapper for `NTAPlib/splitClones.py`.
+
+[root@jfs0 current]# ./snapomatic.splitClones
+ERROR: Version dev
+          --target
+          (svm volume)
+
+          --synchronous
+          (wait for split to complete)
+
+          [--debug]
+          (show debug output)
+
+          [--restdebug]
+          (show REST API calls and responses)
 
 
+The example below shows the operation run with `--restdebug`. This demonstrates how multiple NTAPlib modules can be used in concert.
 
+[root@jfs0 current]# ./snapomatic.splitClones --target jfs_dev1 myclone --restdebug
+->doREST:REST:API: GET https://10.192.160.40/api/storage/volumes?fields=uuid,size,svm.name,svm.uuid,nas.path,aggregates,type&name=myclone&svm.name=jfs_dev1
+->doREST:REST:JSON: None
+->doREST:REST:RESPONSE: {
+->doREST:REST:RESPONSE:  "records": [
+->doREST:REST:RESPONSE:   {
+->doREST:REST:RESPONSE:    "uuid": "2288f071-d692-11ee-8ab0-00a098f7d731",
+->doREST:REST:RESPONSE:    "name": "myclone",
+->doREST:REST:RESPONSE:    "size": 53687091200,
+->doREST:REST:RESPONSE:    "type": "rw",
+->doREST:REST:RESPONSE:    "aggregates": [
+->doREST:REST:RESPONSE:     {
+->doREST:REST:RESPONSE:      "name": "rtp_a700s_01_SSD_1",
+->doREST:REST:RESPONSE:      "uuid": "bb561960-4829-4b0e-bfab-baeb7b4ba3be"
+->doREST:REST:RESPONSE:     }
+->doREST:REST:RESPONSE:    ],
+->doREST:REST:RESPONSE:    "svm": {
+->doREST:REST:RESPONSE:     "name": "jfs_dev1",
+->doREST:REST:RESPONSE:     "uuid": "ac509ea6-fa33-11ed-ae6e-00a098f7d731",
+->doREST:REST:RESPONSE:     "_links": {
+->doREST:REST:RESPONSE:      "self": {
+->doREST:REST:RESPONSE:       "href": "/api/svm/svms/ac509ea6-fa33-11ed-ae6e-00a098f7d731"
+->doREST:REST:RESPONSE:      }
+->doREST:REST:RESPONSE:     }
+->doREST:REST:RESPONSE:    },
+->doREST:REST:RESPONSE:    "_links": {
+->doREST:REST:RESPONSE:     "self": {
+->doREST:REST:RESPONSE:      "href": "/api/storage/volumes/2288f071-d692-11ee-8ab0-00a098f7d731"
+->doREST:REST:RESPONSE:     }
+->doREST:REST:RESPONSE:    }
+->doREST:REST:RESPONSE:   }
+->doREST:REST:RESPONSE:  ],
+->doREST:REST:RESPONSE:  "num_records": 1,
+->doREST:REST:RESPONSE:  "_links": {
+->doREST:REST:RESPONSE:   "self": {
+->doREST:REST:RESPONSE:    "href": "/api/storage/volumes?fields=uuid,size,svm.name,svm.uuid,nas.path,aggregates,type&name=myclone&svm.name=jfs_dev1"
+->doREST:REST:RESPONSE:   }
+->doREST:REST:RESPONSE:  }
+->doREST:REST:RESPONSE: }
+->doREST:RESULT: 200
+->doREST:REASON: OK
+->doREST:REST:API: PATCH https://10.192.160.40/api/storage/volumes/2288f071-d692-11ee-8ab0-00a098f7d731
+->doREST:REST:JSON: {'clone.split_initiated': 'true'}
+->doREST:REST:RESPONSE: {
+->doREST:REST:RESPONSE:  "job": {
+->doREST:REST:RESPONSE:   "uuid": "0efdf999-d694-11ee-8ab0-00a098f7d731",
+->doREST:REST:RESPONSE:   "_links": {
+->doREST:REST:RESPONSE:    "self": {
+->doREST:REST:RESPONSE:     "href": "/api/cluster/jobs/0efdf999-d694-11ee-8ab0-00a098f7d731"
+->doREST:REST:RESPONSE:    }
+->doREST:REST:RESPONSE:   }
+->doREST:REST:RESPONSE:  }
+->doREST:REST:RESPONSE: }
+->doREST:RESULT: 202
+->doREST:REASON: Accepted
+->doREST:REST:API: GET https://10.192.160.40/api/cluster/jobs/0efdf999-d694-11ee-8ab0-00a098f7d731?fields=state,message
+->doREST:REST:JSON: None
+->doREST:REST:RESPONSE: {
+->doREST:REST:RESPONSE:  "uuid": "0efdf999-d694-11ee-8ab0-00a098f7d731",
+->doREST:REST:RESPONSE:  "state": "running",
+->doREST:REST:RESPONSE:  "message": "Clone split initiated.",
+->doREST:REST:RESPONSE:  "_links": {
+->doREST:REST:RESPONSE:   "self": {
+->doREST:REST:RESPONSE:    "href": "/api/cluster/jobs/0efdf999-d694-11ee-8ab0-00a098f7d731"
+->doREST:REST:RESPONSE:   }
+->doREST:REST:RESPONSE:  }
+->doREST:REST:RESPONSE: }
+->doREST:RESULT: 200
+->doREST:REASON: OK
+Clone split initiated.
+
+The first API validated that the target volume myclone exists.
+
+/api/storage/volumes?fields=uuid,size,svm.name,svm.uuid,nas.path,aggregates,type&name=myclone&svm.name=jfs_dev1
+
+The second API call started the split operation 
+
+->doREST:REST:API: PATCH https://10.192.160.40/api/storage/volumes/2288f071-d692-11ee-8ab0-00a098f7d731
+->doREST:REST:JSON: {'clone.split_initiated': 'true'}
+
+This API returned a result code of 202, which means the call was accepted. The final API call used the job UUID to verify that the split operation was running.
+
+->doREST:REST:API: GET https://10.192.160.40/api/cluster/jobs/0efdf999-d694-11ee-8ab0-00a098f7d731?fields=state,message
+
+When run without --synchronous, this script doesn't wait to check whether the operation completed, it only checked to see if the operation got to the point where it was running, as indicated by the "state" field by the response.
 
 
 # NTAPlib module debug settings
