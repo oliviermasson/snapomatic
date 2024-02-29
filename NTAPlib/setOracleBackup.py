@@ -113,7 +113,7 @@ class setOracleBackup:
                                         home=self.home,
                                         base=self.base,
                                         debug=self.debug)
-                if out.result > 0:
+                if out.result > 0 or out.errorflag > 0:
                     self.result=1
                     self.reason=out.reason
                     self.stdout=out.stdout

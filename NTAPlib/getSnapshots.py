@@ -138,7 +138,7 @@ class getSnapshots:
                 if self.debug & 1:
                     userio.message("Retriving CG snapshots for CG " + cgname,service=localapi + ":OP")
                 rest=doREST.doREST(self.svm,'get',nextapi,restargs=self.cgrestargs,debug=self.debug)
-                if rest.result == 0:
+                if rest.result == 200:
                     for record in rest.response['records']:
                         for subrecord in record['snapshot_volumes']:
                             volume=subrecord['volume']['name']
@@ -168,7 +168,7 @@ class getSnapshots:
             if self.debug & 1:
                 userio.message("Retrieving snapshots for " + self.svm + ":" + volmatch,service=localapi + ":OP")
             rest=doREST.doREST(self.svm,'get',self.volapi,restargs=self.volrestargs + '&volume.name=' + volmatch,debug=self.debug)
-            if rest.result == 0:
+            if rest.result == 200:
                 for record in rest.response['records']:
                     uuid=record['uuid']
                     name=record['name']

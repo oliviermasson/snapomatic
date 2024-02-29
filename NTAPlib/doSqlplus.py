@@ -73,7 +73,6 @@ class doSqlplus:
 
         if 'local' in kwargs.keys():
             self.local=kwargs['local']
-        
 
         pids=os.listdir('/proc')
         if len(self.sid) > 3 and self.sid[:4] == '+ASM':
@@ -119,19 +118,16 @@ class doSqlplus:
                         self.stdout=None
                         self.stderr=None
                         return
-            
-
+        
             import getCredentials
             credential=getCredentials.getCredential('oracle',self.sid,debug=self.debug)
             if credential.result == 0:
                 self.username=credential.username
                 self.password=credential.password
             else:
-                self.result=1
-                self.reason=credential.reason
-                self.stdout=credential.stdout
-                self.stderr=credential.stderr
-                return
+                if self.debug & 16 and not self.debug & 8:
+                    userio.message("Unable to find credential for " + self.sid + ", will attempt OS authentication",service='doSqlPlus.execute:EXEC')
+                self.local=True
 
         if 'user' in kwargs.keys() and kwargs['user'] is not None:
             useraccount = kwargs['user']
@@ -150,7 +146,7 @@ class doSqlplus:
                 self.errorflag=1
                 self.reason='Unable to get Oracle user for ' + self.home
             else:
-                self.user=out.user
+                self.username=out.user
                 checkuid = pwd.getpwnam(out.user).pw_uid
     
         if not checkuid == os.geteuid():
@@ -199,7 +195,7 @@ class doSqlplus:
         self.result=sqlpluscmd.result
         self.stdout=sqlpluscmd.stdout
         self.stderr=sqlpluscmd.stderr
-    
+
         for line in self.stdout:
             if line[: 5] == 'ERROR' or line[:20] == 'ORACLE not available' or line[:9] == 'ORA-01034:':
                 self.result=0
@@ -211,3 +207,6 @@ class doSqlplus:
         if self.debug & 16 and not self.debug & 8:
             userio.message(self.stdout,service='doSqlPlus.execute:STDOUT')
             userio.message(self.stderr,service='doSqlPlus.execute:STDERR')
+
+        if self.errorflag is None:
+            self.errorflag = False

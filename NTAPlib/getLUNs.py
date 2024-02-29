@@ -73,10 +73,10 @@ class getLUNs:
 
         if self.debug & 1:
             userio.message("Retrieving LUNs from svm " + self.svm ,service=localapi + ":OP")
-            if self.vovollfilter is not None:
+            if self.volfilter is not None:
                 userio.message("LUN search list: " + self.volfilter,service=localapi + ":OP")
         rest=doREST.doREST(self.svm,'get',self.api,debug=self.debug,restargs=self.restargs)
-        if rest.result == 0:
+        if rest.result == 200:
             self.lunpath={}
             self.lunuuid={}
             for record in rest.response['records']:

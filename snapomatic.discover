@@ -13,10 +13,13 @@ snapomaticversion='dev'
 
 validoptions={'target':'multistr',
               'debug':'bool', \
+              'multipaths':'bool', \
               'restdebug':'bool'}
 
 usage="Version " + snapomaticversion + "\n" + \
       "discover --target [filesystem or LUN]\n" + \
+      "        [--multipaths]\n" + \
+      "        (show /etc/multipath.conf template)\n" + \
       "        [--debug]\n" + \
       "        (show debug output)\n"
 
@@ -33,6 +36,7 @@ mypaths.go()
 
 paths=list(mypaths.paths.keys())
 paths.sort()
+multipaths=[]
 pathgrid=[['path','mountpoint','fs','vg','lv','pv','SVM','export','volume','lun']]
 for path in paths:
     if mypaths.paths[path]['fstype'] in ['xfs']:
@@ -73,12 +77,28 @@ for path in paths:
                          '',
                          mypaths.luns[mypaths.paths[path]['device']].volume,
                          mypaths.luns[mypaths.paths[path]['device']].path.split('/')[-1]])
+
+    
+        if myopts.multipaths:
+            if mypaths.luns[mypaths.paths[path]['device']].wwid:
+                multipaths.append('    multipath {')
+                multipaths.append('        wwid  ' + mypaths.luns[mypaths.paths[path]['device']].wwid)
+                multipaths.append('        alias ' + mypaths.luns[mypaths.paths[path]['device']].volume + \
+                                                     "_" + \
+                                                     mypaths.luns[mypaths.paths[path]['device']].path.split('/')[-1])
+                multipaths.append('    }')
+
     
 if len(mypaths.unknown) > 0:
     for item in mypaths.unknown:
         pathgrid.append([item,'?','?','?','?','?','?','?','?','?'])  
 
 userio.grid(pathgrid)
+
+if myopts.multipaths:
+    userio.message("multipaths {")
+    userio.message(multipaths)
+    userio.message("}")
 
         
                  

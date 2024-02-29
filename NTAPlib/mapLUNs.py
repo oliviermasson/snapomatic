@@ -62,9 +62,9 @@ class mapLUNs:
                 userio.message("Mapping LUN " + self.svm + ":" + item + " to " + self.igroup,service=localapi + ":OP")
             rest=doREST.doREST(self.svm,'post',self.api,json=json4rest,debug=self.debug)
 
-            if rest.result > 0:
+            if not rest.result == 201:
                 self.result=1
-                self.reason="Failed to map at least one volume"
+                self.reason="Failed to map at least one LUN"
                 self.stdout=self.stdout + rest.stdout
                 self.stdout=self.stdout + rest.stderr
                 self.failed.append((item,'REST call failed'))

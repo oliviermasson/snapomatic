@@ -1,0 +1,196 @@
+#! /usr/bin/python3
+import sys
+pythonversion=sys.version_info
+if pythonversion[0] != 3 or (pythonversion[1] < 6 or pythonversion[1] > 11):
+    print("This script requires Python 3.6 through 3.11")
+    sys.exit(1)
+sys.path.append(sys.path[0] + "/NTAPlib")
+import setOracleBackup
+import startOracleInstance
+import stopOracleInstance
+import mountOracleInstance
+import openOracleInstance
+import discoverOracle
+import userio
+
+snapomaticversion='DEV'
+
+validoptions={'backup':    {'sid':'multistr', \
+                            'stop':'bool',\
+                            'start':'bool',\
+                            'debug':'bool',\
+                            'force':'bool'},
+              'start' :    {'sid':'multistr', \
+                            'mount': 'bool', \
+                            'nomount': 'bool', \
+                            'debug':'bool'},\
+              'stop' :     {'sid':'multistr', \
+                            'debug':'bool',\
+                            'abort':'bool'},\
+              'open' :     {'sid':'multistr', \
+                            'debug':'bool'},\
+              'mount' :    {'sid':'multistr', \
+                            'debug':'bool'},\
+              'discover' : {'sid':'str', \
+                            'debug':'bool'}}
+
+requiredoptions={'backup' : ['sid',['start','stop']], \
+                 'start' : ['sid'],\
+                 'stop' : ['sid'],\
+                 'mount' : ['sid'],\
+                 'open' : ['sid'],\
+                 'discover' : ['sid']}\
+
+mutex=[['start','stop'],['mount','nomount']]
+
+usage="Version " + snapomaticversion + "\n" + \
+      "backup   [--sid]\n" + \
+      "         (name(s) of database SIDs\n\n" + \
+      "         [--start or --stop]\n" + \
+      "         (start or stop backup mode)\n\n" \
+      "         [--force]\n" + \
+      "         (ignore current backup state of datafiles)\n\n" \
+      "         [--debug]\n" + \
+      "         (show debug output)\n\n" + \
+      "start    [--sid]\n" + \
+      "         (name(s) of database SIDs\n\n" + \
+      "         [--mount]\n" + \
+      "         (startup in mount mode)\n\n" \
+      "         [--nomount]\n" + \
+      "         (startup in nomount mode)\n\n" \
+      "         [--debug]\n" + \
+      "         (show debug output)\n\n" + \
+      "stop     [--sid]\n" + \
+      "         (name(s) of database SIDs\n\n" + \
+      "         [--abort]\n" + \
+      "         (perform shutdown abort. Default is shutdown immediate)\n\n" \
+      "         [--debug]\n" + \
+      "         (show debug output)\n\n" + \
+      "mount    [--sid]\n" + \
+      "         (name(s) of database SIDs\n\n" + \
+      "         [--debug]\n" + \
+      "         (show debug output)\n\n" + \
+      "open     [--sid]\n" + \
+      "         (name(s) of database SIDs\n\n" + \
+      "         [--debug]\n" + \
+      "         (show debug output)\n\n" + \
+      "discover [--sid]\n" + \
+      "         (name(s) of database SID\n\n" + \
+      "         [--debug]\n" + \
+      "         (show debug output)\n"
+
+myopts=userio.validateoptions(sys.argv,validoptions,mutex=mutex,usage=usage,required=requiredoptions)
+
+sidlist=myopts.sid
+
+if myopts.debug:
+    debug=25
+else:
+    debug=0
+
+
+if myopts.mode == 'backup':
+    if myopts.force:
+        force=True
+    else:
+        force=False
+
+    if myopts.start:
+        command=True
+    elif myopts.stop:
+        command=False
+    else:
+        userio.fail("Missing a --start or --stop")
+        
+    for sid in sidlist:
+        change=setOracleBackup.setOracleBackup(sid,debug=debug,force=force)
+        if change.go(command):
+            userio.message("Success: " + sid + ":backup mode " + str(command))
+        else:
+            userio.warn(change.reason)
+
+if myopts.mode == 'start':
+    if myopts.mount:
+        start='mount'
+    elif myopts.nomount:
+        start='nomount'
+    else:
+        start=None
+    for sid in sidlist:
+        change=startOracleInstance.startOracleInstance(sid,start=start,debug=debug)
+        if change.go():
+            userio.message("Success: " + sid + " started")
+        else:
+            userio.warn(change.reason)
+
+if myopts.mode == 'stop':
+    abort=myopts.abort
+    for sid in sidlist:
+        change=stopOracleInstance.stopOracleInstance(sid,debug=debug,abort=abort)
+        if change.go():
+            userio.message("Success: " + sid + " stopped")
+        else:
+            userio.warn(change.reason)
+
+if myopts.mode == 'mount':
+    for sid in sidlist:
+        change=mountOracleInstance.mountOracleInstance(sid,debug=debug)
+        if change.go():
+            userio.message("Success: " + sid + " mounted")
+        else:
+            userio.warn(change.reason)
+
+if myopts.mode == 'open':
+    for sid in sidlist:
+        change=openOracleInstance.openOracleInstance(sid,debug=debug)
+        if change.go():
+            userio.message("Success: " + sid + " opened")
+        else:
+            userio.warn(change.reason)
+
+if myopts.mode == 'discover':
+    sid=sidlist
+    info=discoverOracle.discoverOracle(sid,debug=debug)
+    if info.go():
+        grid=[['Datafile','File#','Size','Backup']]
+        itemlist=list(info.datafiles.keys())
+        itemlist.sort()
+        for item in itemlist:
+            grid.append([item,info.datafiles[item]['fileno'],info.datafiles[item]['size'],str(info.datafiles[item]['backup'])])
+        userio.grid(grid)
+        userio.linefeed()
+
+        grid=[['Archive log destination']]
+        itemlist=list(info.arch.keys())
+        itemlist.sort()
+        for item in itemlist:
+            grid.append([item])
+        userio.grid(grid)
+        userio.linefeed()
+
+        grid=[['Redo log','Group#','Thread#','Size']]
+        itemlist=list(info.redo.keys())
+        itemlist.sort()
+        for item in itemlist:
+            grid.append([item,info.redo[item]['group'],info.redo[item]['thread'],info.redo[item]['size']])
+        userio.grid(grid)
+        userio.linefeed()
+
+        grid=[['Control file']]
+        itemlist=list(info.ctrl.keys())
+        itemlist.sort()
+        for item in itemlist:
+            grid.append([item])
+        userio.grid(grid)
+        userio.linefeed()
+        
+        grid=[['Parameter','Value']]
+        itemlist=list(info.pfile.keys())
+        itemlist.sort()
+        for item in itemlist:
+            grid.append([item,info.pfile[item]])
+        userio.grid(grid)
+        userio.linefeed()
+
+    else:
+        userio.warn(info.reason)

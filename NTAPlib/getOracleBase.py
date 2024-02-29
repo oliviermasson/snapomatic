@@ -59,6 +59,8 @@ class getOracleBase:
                 showDebug()
             return(False)
 
+        if self.debug & 1:
+            userio.message("Executing " + self.home + "/bin/orabase",service=localapi + ":OP")
         out=doProcess.doProcess(self.home + "/bin/orabase",user=self.user,env={'ORACLE_HOME':self.home,'LIB':self.home + '/lib'})
         if out.result == 0:
             if os.path.exists(out.stdout[-1]):

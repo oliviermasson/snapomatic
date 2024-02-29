@@ -2,7 +2,7 @@
 import sys
 pythonversion=sys.version_info
 if pythonversion[0] != 3 or pythonversion[1] < 6:
-    print("This script requires Python 3.6 or higher")
+    userio.message("This script requires Python 3.6 or higher")
     sys.exit(1)
 import os
 import getopt
@@ -13,6 +13,7 @@ import userio
 snapomaticversion='dev'
 
 validoptions={'target':'multistr',
+              'synchronous':'bool',
               'debug':'bool',
               'restdebug':'bool'}
 
@@ -21,6 +22,8 @@ requiredoptions=['svm','volume']
 usage="Version " + snapomaticversion + "\n" + \
       "          --target\n" + \
       "          (svm volume)\n\n" + \
+      "          --synchronous\n" + \
+      "          (wait for split to complete)\n\n" + \
       "          [--debug]\n" + \
       "          (show debug output)\n\n" + \
       "          [--restdebug]\n" + \
@@ -29,10 +32,10 @@ usage="Version " + snapomaticversion + "\n" + \
 myopts=userio.validateoptions(sys.argv,validoptions,usage=usage,required=requiredoptions)
 
 svm=myopts.target[0]
-if not len(myoptions.target == 2):
+if not len(myopts.target) > 1:
     userio.fail(usage)
 else:
-    volume=myopts[1]
+    volumes=myopts.target[1:]
 
 debug=0
 if myopts.debug:
@@ -40,10 +43,14 @@ if myopts.debug:
 if myopts.restdebug:
         debug=debug+2
 
-split=splitClones(svm,volume,debug=debug)
-if not split.go():
-    userio.message(split.reason)
-    sys.exit(1)
-else:
-    userio.message("Started split of " + volume)
-    sys.exit(0)
+split=splitClones(svm,volumes,synchronous=myopts.synchronous,debug=debug)
+split.go()
+
+for vol in split.success:
+    if myopts.synchronous:
+        userio.message("Split complete: " + vol)
+    else:
+        userio.message("Split initiated: " + vol)
+for vol in split.failed:
+    userio.message("Split failed: " + vol + ", '" + split.failedreason[vol] + "'")
+sys.exit(0)

@@ -64,7 +64,7 @@ class getSnapmirror:
             if len(self.volumes) > 0:
                 userio.message("Volume search list: " + ','.join(self.volumes),service=localapi)
         rest=doREST.doREST(self.svm,'get',self.api,restargs=self.restargs,debug=self.debug)
-        if rest.result == 0:
+        if rest.result == 200:
             for record in rest.response['records']:
                 uuid=record['uuid']
                 srcsvm,srcvol=record['source']['path'].split(':')
@@ -85,6 +85,7 @@ class getSnapmirror:
                                 return(False)
                         else:
                             volpatternmatch=re.compile('^' + pattern + '$')
+
                         if re.findall(volpatternmatch,srcvol) or re.findall(volpatternmatch,dstvol):
                             volumematch=True
                             break

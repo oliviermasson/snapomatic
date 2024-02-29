@@ -98,6 +98,7 @@ class getCredential():
                                 return
                             if 'dataLIF' in item.keys():
                                 self.dataLIF=item['dataLIF'].split(',')
+                            return
                 elif self.resourcetype=='oracle':
                     allsids=[]
                     if len(configjson['oracle']['sid']) == 0:

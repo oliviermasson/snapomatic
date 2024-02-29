@@ -22,11 +22,20 @@ def execute(self,**kwargs):
     returndict = {}
 
     if self.user is not None:
+        passkwargs['preexec_fn'] = changeUser(self.user, showchange=False)
         if self.debug & 8:
-            passkwargs['preexec_fn'] = changeUser(self.user, showchange=True)
-        else:
-            passkwargs['preexec_fn'] = changeUser(self.user, showchange=False)
-    
+            userinfo = pwd.getpwnam(self.user)
+            newuid = userinfo.pw_uid
+            newgid = userinfo.pw_gid
+            grouplist = [newgid]
+            allgroups = grp.getgrall()
+            for item in allgroups:
+                if self.user in item[3]:
+                    grouplist.append(item[2])
+            userio.message("---> Changing GID to " + str(newgid),service='doProcess.execute:USER')
+            userio.message("---> Changing group memberships to " + str(grouplist),service='doProcess.execute:USER')
+            userio.message("---> Changing user to " + self.user,service='doProcess.execute:USER')
+
     if 'retry' in kwargs.keys():
         retryable = kwargs['retry']
 

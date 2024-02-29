@@ -76,3 +76,23 @@
 
 .nfs [DEVICE TUPLE]
     volumes: {volumes}
+
+.datafiles [path]
+    path
+    filenumber
+    size
+    backup
+
+.redo [path]
+    path
+    group
+    number
+
+.archivelog [bool]
+
+.arch [path]
+
+.ctrl [path]
+
+.pfile [name]
+    value

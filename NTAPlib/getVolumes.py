@@ -68,7 +68,7 @@ class getVolumes:
                 userio.message("Volume search list: " + self.volmatch,service=localapi + ":OP")
 
         rest=doREST.doREST(self.svm,'get',self.api,restargs=self.restargs,debug=self.debug)
-        if rest.result == 0:
+        if rest.result == 200:
             for record in rest.response['records']:
                 svmname=record['svm']['name']
                 if not svmname == self.svm:

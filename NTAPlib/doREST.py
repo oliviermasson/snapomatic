@@ -3,6 +3,7 @@ import urllib3
 import os
 import json
 import userio
+import time
 urllib3.disable_warnings()
 
 headers = {'content-type': "application/json",
@@ -24,6 +25,8 @@ class doREST():
         self.stdout=[]
         self.stderr=[]
         self.debug=0
+        self.synchronous=False
+        self.sleeptime=1
         username=None
         password=None
 
@@ -43,6 +46,12 @@ class doREST():
 
         if 'debug' in kwargs.keys():
             self.debug=kwargs['debug']
+
+        if 'synchronous' in kwargs.keys():
+            self.synchronous=kwargs['synchronous']
+
+        if 'sleeptime' in kwargs.keys():
+            self.sleeptime=kwargs['sleeptime']
 
         if 'username' in kwargs.keys():
             username=kwargs['username']
@@ -93,6 +102,7 @@ class doREST():
         elif credential.cert is not None:
             self.go(credential.cert,credential.key,authtype='pass')
 
+
     def showDebug(self):
         userio.debug(self)
 
@@ -123,24 +133,91 @@ class doREST():
             return(False)
         
         self.jsonout=json.dumps(response.json(),indent=1).splitlines()
-
         self.result=response.status_code
         self.reason=response.reason
         self.response=response.text
-        
+
         if self.debug & 2:
             self.showDebug()
-    
-        if response.ok:
+
+        if not response.ok:
             try:
                 convert2dict=response.json()
-                self.result=0
+                self.response=convert2dict
+                return(True)
+            except Exception as e:
+                self.result=1
+                self.reason=e
+            return(False)
+        elif not self.synchronous and self.result == 202:
+            try:
+                convert2dict=response.json()
                 self.response=convert2dict
                 return(True)
             except Exception as e:
                 self.result=1
                 self.reason=e
                 return(False)
+        elif self.synchronous and self.result == 202:
+            tmpurl=self.url
+            tmpjsonin=self.jsonin
+            tmpapi=self.api
+            tmprestargs=self.restargs
+            tmpreqtype=self.reqtype
+            tmpresponse=self.response
+            self.jsonin=None
+            try:
+                convert2dict=response.json()
+                jobuuid=convert2dict['job']['uuid']
+            except:
+                self.reason="Unable to retrieve uuid for asynchronous operation"
+                if self.debug & 2:
+                    self.showDebug()
+                return(False)
+            
+            running=True
+            while running:
+                time.sleep(self.sleeptime)
+                self.api="/cluster/jobs/" + jobuuid
+                self.url="https://" + self.mgmtaddr + "/api" + self.api
+                self.restargs=["fields=state,message"]
+                self.url=self.url + "?" + "&".join(self.restargs)
+                self.call="GET " + self.url
+        
+                try:
+                    jobrest=requests.get(self.url,auth=(username,password),verify=False)
+                
+                except Exception as e:
+                    self.reason=str(e)
+                    return(False)
+
+                convert2dict=jobrest.json()
+                self.jsonout=json.dumps(jobrest.json(),indent=1).splitlines()
+                self.response=convert2dict
+                self.result=jobrest.status_code
+                self.reason=jobrest.reason
+    
+                if self.debug & 2:
+                    self.showDebug()
+                
+                if not self.result == 202 and not self.response['state'] == 'running':
+                    running=False
+                
+            if not self.result == 200:
+                self.reason="Job " + jobuuid + " failed"
+                return(False)
+            elif not self.response['state'] == 'success':
+                self.result=1
+                return(False)
+            else:
+                self.url=tmpurl
+                self.jsonin=tmpjsonin
+                self.api=tmpapi
+                self.restargs=tmprestargs
+                self.reqtype=tmpreqtype
+                self.response=tmpresponse
+                return(True)
+                
         else:
             self.result=response.status_code
             self.reason=response.reason

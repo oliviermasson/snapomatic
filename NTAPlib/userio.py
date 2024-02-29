@@ -62,12 +62,21 @@ def validateoptions(sysargs,validoptions,**kwargs):
     
     if not modal and 'acceptpaths' in kwargs.keys() and kwargs['acceptpaths']:
         parser.add_argument('paths',nargs='+',default=None)
+        
+    for item in sysargs:
+        if item[:2] == '--':
+            passedargs.append(item[2:])
+    passedargs=set(passedargs)
 
     if 'required' in kwargs.keys():
         if modal:
             requiredoptions=kwargs['required'][mode]
         else:
             requiredoptions=kwargs['required']
+        for option in requiredoptions:
+            if type(option) is list:
+                if not set(option).intersection(passedargs):
+                    fail("One of the following arguments is required: --" + ' --'.join(option))
     else:
         requiredoptions=False
 
@@ -77,8 +86,8 @@ def validateoptions(sysargs,validoptions,**kwargs):
         validoptions=validoptions
 
     for option in validoptions.keys():
-        if requiredoptions:
-            if option in requiredoptions:
+        if type(option) is str:
+            if requiredoptions and option in requiredoptions:
                 requirement=True
             else:
                 requirement=False
@@ -113,17 +122,12 @@ def validateoptions(sysargs,validoptions,**kwargs):
     args=parser.parse_args()
     
     if 'mutex' in kwargs.keys():
-        passedargs=[]
-        for item in sysargs:
-            if item[:2] == '--':
-                passedargs.append(item[2:])
-        passedargs=set(passedargs)
         for item in kwargs['mutex']:
             if len(item) < 1:
                 fail("Corrupt mutex lists")
             if len(passedargs.intersection(set(item))) > 1:
                 fail("Arguments " + ','.join(item) + " are mutually exclusive")
-
+    
     if 'dependent' in kwargs.keys():
         for key in kwargs['dependent'].keys():
             if key in returndict['OPTS'].keys():

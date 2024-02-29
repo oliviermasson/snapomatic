@@ -123,7 +123,10 @@ class getOracleHome:
                 invXML=xmltodict.parse(invXMLtext)
                 homes=[]
                 gridhomes=[]
-                for item in invXML['INVENTORY']['HOME_LIST']['HOME']:
+                homeXML = invXML['INVENTORY']['HOME_LIST']['HOME']
+                if type(homeXML) is dict:
+                    homeXML = [invXML['INVENTORY']['HOME_LIST']['HOME']]
+                for item in homeXML:
                     if os.path.exists(item['@LOC'] + "/bin/oracle"):
                         if '@CRS' in item.keys() and item['@CRS'] == 'true':
                             if self.grid:
@@ -207,7 +210,7 @@ class getOracleHome:
             try:
                 oratablines=open(self.path, 'r').read().splitlines()
                 if self.debug:
-                    userio.message("Scanning oratab for " + self.sid)
+                    userio.message("Scanning oratab for " + self.sid,service=localapi + ":OP")
             except:
                 self.result=1
                 self.reason="Unable to open oratab file at " + self.path 
@@ -219,18 +222,18 @@ class getOracleHome:
                         if oratabfields[0] == self.sid:
                             home=oratabfields[1]
                             if os.path.exists(home + "/bin/oracle"):
-                                out=getOracleBase.getOracleBase(home,apicaller=localapi,debug=self.debug)
-                                if out.result > 0:
+                                baseout=getOracleBase.getOracleBase(home,apicaller=localapi,debug=self.debug)
+                                if not baseout.go():
                                     self.result=1
-                                    self.reason=out.reason
-                                    self.stdout=out.stdout
-                                    self.stderr=out.stderr
+                                    self.reason=baseout.reason
+                                    self.stdout=baseout.stdout
+                                    self.stderr=baseout.stderr
                                     return(False)
                                 else:
                                     self.result=0
                                     self.home=home
-                                    self.base=out.base
-                                    self.user=out.user
+                                    self.base=baseout.base
+                                    self.user=baseout.user
                                     self.installed={home:{'base':self.base,
                                                           'version':None,
                                                           'release':None,
