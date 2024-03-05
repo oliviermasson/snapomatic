@@ -446,6 +446,7 @@ This is a more complicated workflow created for a customer POC. It illustrates s
 * Clone the volumes. Do NOT break the mirrors. This was required so DR can be tested without interrupting replication.
 * Create the clone of the target volumes to a timepoint that is immediately *after* or immediately *before* the desired recovery point. 
 * Map all LUNs
+* Bring up databases, but this action is performed by a 2nd script. Keep reading to find that example...
 
 This script works as follows:
 
@@ -510,12 +511,12 @@ As an example of running this at large scale, the following two commands could b
 
 
     [root@jfs0 current]# ./snapomatic.cloneSAN4DR --target jfs_dev2 'ora_DRcluster_.*dbf' \ 
-                                                  --recoverypoint 2024-02-20T12:30:00+0500 \
+                                                  --recoverypoint 2024-03-03T12:30:00+0500 \
                                                   --before \
                                                   --igrouptoken 2
     
     [root@jfs0 current]# ./snapomatic.cloneSAN4DR --target jfs_dev2 'ora_DRcluster_.*logs' \ 
-                                                  --recoverypoint 2024-02-20T12:30:00+0500 \
+                                                  --recoverypoint 2024-03-03T12:30:00+0500 \
                                                   --after \
                                                   --igrouptoken 2
 
@@ -586,8 +587,374 @@ The result of this two commands are the following LUNs, mapped, inside of cloned
     jfs_dev2 /vol/failover_ora_DRcluster_UAT_logs/LUN1
     60 entries were displayed.
     
+# snapomatic.RACfailover
+
+This next script is the next step after using snapmatic.clone4DR. The purpose of clone4DR was to identify and clone the volumes and snapshots that made up a usable DR copy of the database at the desired recoverypoint. The purpose of RACfailover is to discover the contents of the newly cloned LUNs and register and recovery the databases.
+
+Syntax:
+
+    snapmatic.RACfailover --volpattern
+              (target volume pattern)
+
+              --recoverypoint
+              (recovery timestamp in YYYY-MM-DDTHH:MM:SS[TZ])
+
+                --debug
+              (print process STDOUT and STDERR)
+
+                --iscsi
+              (Scan for iSCSI LUNs)
+
+                --noscan
+              (Bypass LUN scanning)
+
+                --noafd
+              (Bypass ASM Filter Driver scanning)
+
+                --noasmlib
+              (Bypass ASMlib scanning)
+
+
+The following output shows the results of completing the failover of the 10 databases that were cloned in the clone4DR step.
+
+The command is just this:
+
+    [root@jfs8 current]# ./snapomatic.RACfailover --volpattern 'failover_ora_DRcluster_*' --iscsi --recoverypoint 2024-03-03T12:30:00+0500
+    Updating iSCSI targets
+
+This is going to trigger the following steps:
+
+1. Rescan all LUNs, including an iSCSI refresh (the test environment uses iSCSI)
+2. Perform discovery on all LUNs that are hosted on volumes matching the pattern "failover_ora_DRcluster". The clone4DR script cloned volumes matching ora_DRcluster* and prepended failover_ onto the volumes. The RACfailover script will look for LUNs matching this pattern.
+3. Attempt to discover ASMlib and ASM Filter Driver signatures on the LUNs and build ASMlib/AFD devices if required
+4. Mount all discovered ASM diskgroups on all hosts in the RAC cluster
+5. Read the contents of those ASM diskgroups. The script is looking for directories containing an spfile and a passwd file. If those files are found, that means the containing directory is the name of a database that has been cloned and should be brought online.
+6. Identify all installed versions of Oracle Database. There could be multiple versions. The script will walk the versions and attempt to read the spfile discovered on the ASM diskgroups. Once the script can succesfully read this data, the script can determine the correct version of Oracle for that database.
+7. Register the databases with RAC using srvctl.
+8. Mount the database
+9. Recover the database to the specified recoverypoint
+10. Open the database.
+
+The output looks like this:
+
+    Sleeping for 10 seconds while multipath maps are built
+
+This sleep step is required to avoid race conditions between multipathd and optional packages such as the ASM Filter Driver.
+
+    Discovering AFD devices...
+    Refreshing AFD configuration
+
+    Refreshing ASMlib configuration
+    Unable to scan ASMlib disks on host jfs8
+
+Some of the ASM diskgroups may have been under the control of AFD or ASMlib. The required administrative commands to rescan for those devices was invoked. In this test environment, ASMlib was not installed so an error was reported.
+
+    Retrieving ASM diskgroup names
+    >> Identified diskgroup HRLOGS
+    >> Identified diskgroup DWHDATA
+    >> Identified diskgroup SUPPLYLOGS
+    >> Identified diskgroup CRMLOGS
+    >> Identified diskgroup UATDATA
+    >> Identified diskgroup DEVLOGS
+    >> Identified diskgroup TSTLOGS
+    >> Identified diskgroup ERPLOGS
+    >> Identified diskgroup FORECASTDATA
+    >> Identified diskgroup TSTDATA
+    >> Identified diskgroup DEVDATA
+    >> Identified diskgroup BILOGS
+    >> Identified diskgroup CRMDATA
+    >> Identified diskgroup HRDATA
+    >> Identified diskgroup FORECASTLOGS
+    >> Identified diskgroup SUPPLYDATA
+    >> Identified diskgroup ERPDATA
+    >> Identified diskgroup DWHLOGS
+    >> Identified diskgroup BIDATA
+    >> Identified diskgroup UATLOGS
+
+The names of the ASM diskgroups were identified using kfed, Oracle's low-level disk scanning utility. Once we have the name of the diskgroups, they can be mounted. It's possible this script was run more than once, so before attempting to mount, the script will check on which are already mounted.
+
+    Identifying currently mounted ASM diskgroups
+    
+    Mounting ASM diskgroups...
+    Mounting HRLOGS on host jfs8
+    Mounting DWHDATA on host jfs8
+    Mounting SUPPLYLOGS on host jfs8
+    Mounting CRMLOGS on host jfs8
+    Mounting UATDATA on host jfs8
+    Mounting DEVLOGS on host jfs8
+    Mounting TSTLOGS on host jfs8
+    Mounting ERPLOGS on host jfs8
+    Mounting FORECASTDATA on host jfs8
+    Mounting TSTDATA on host jfs8
+    Mounting DEVDATA on host jfs8
+    Mounting BILOGS on host jfs8
+    Mounting CRMDATA on host jfs8
+    Mounting HRDATA on host jfs8
+    Mounting FORECASTLOGS on host jfs8
+    Mounting SUPPLYDATA on host jfs8
+    Mounting ERPDATA on host jfs8
+    Mounting DWHLOGS on host jfs8
+    Mounting BIDATA on host jfs8
+    Mounting UATLOGS on host jfs8
+
+In this case, the databases were divided into a datafile and a log ASM diskgroup. This is required for PIT recovery as explained above. The copy of the datafile needs to be from an earlier point in time than the logs. 
+    
+    Discovering contents of ASM diskgroup
+    Retrieving contents of diskgroups...
+    >> Running asmcmd...
+    >> Found directory HRU on diskgroup +HRDATA
+    >> Found directory BIU on diskgroup +BILOGS
+    >> Found directory CRMU on diskgroup +CRMLOGS
+    >> Found directory DEVU on diskgroup +DEVLOGS
+    >> Found directory DWHU on diskgroup +DWHLOGS
+    >> Found directory ERPU on diskgroup +ERPLOGS
+    >> Found directory FCSTU on diskgroup +FORECASTLOGS
+    >> Found directory HRU on diskgroup +HRLOGS
+    >> Found directory SUPPLYU on diskgroup +SUPPLYLOGS
+    >> Found directory TSTU on diskgroup +TSTLOGS
+    >> Found directory UATU on diskgroup +UATLOGS
+    >> Found directory BIU on diskgroup +BIDATA
+    >> Found directory CRMU on diskgroup +CRMDATA
+    >> Found directory DEVU on diskgroup +DEVDATA
+    >> Found directory DWHU on diskgroup +DWHDATA
+    >> Found directory ERPU on diskgroup +ERPDATA
+    >> Found directory FCSTU on diskgroup +FORECASTDATA
+    >> Found directory SUPPLYU on diskgroup +SUPPLYDATA
+    >> Found directory TSTU on diskgroup +TSTDATA
+    >> Found directory UATU on diskgroup +UATDATA
+    >> Found directory HRSU on diskgroup +HRDATA
+    >> Identified database HRU
+    >> Identified database BIU
+    >> Identified database CRMU
+    >> Identified database DEVU
+    >> Identified database DWHU
+    >> Identified database ERPU
+    >> Identified database FCSTU
+    >> Identified database SUPPLYU
+    >> Identified database TSTU
+    >> Identified database UATU
+
+The output above reflects a search for directories containing an spfile and a passwd file. If those two files exist, then the name of the database should be the containing directory. The script has now identified at least part of a database, but there's no guarantee all LUNs were cloned at this point. There's also no way to know which version of Oracle is associated with this database. 
+    
+    Oracle version map: {'19.0.0.0.0': '/orabin19', '19.18.0.0.0': '/orabin19'}
+    Extracting spfiles...
+    >>  Attempting to create pfile from spfile +HRDATA/HRU/PARAMETERFILE/spfile.268.1144254031
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database HRU configured for 19.0.0
+    >> Database HRU has db_name of NHRU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for HRU
+      >> Database registration successful
+    
+    >>  Attempting to create pfile from spfile +BIDATA/BIU/PARAMETERFILE/spfile.267.1132063661
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database BIU configured for 19.0.0
+    >> Database BIU has db_name of NBIU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for BIU
+      >> Database registration successful
+    
+    >>  Attempting to create pfile from spfile +CRMDATA/CRMU/PARAMETERFILE/spfile.259.1132093037
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database CRMU configured for 19.0.0
+    >> Database CRMU has db_name of NCRMU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for CRMU
+      >> Database registration successful
+    
+    >>  Attempting to create pfile from spfile +DEVDATA/DEVU/PARAMETERFILE/spfile.267.1132086883
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database DEVU configured for 19.0.0
+    >> Database DEVU has db_name of NDEVU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for DEVU
+      >> Database registration successful
+    
+    >>  Attempting to create pfile from spfile +DWHDATA/DWHU/PARAMETERFILE/spfile.267.1132093245
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database DWHU configured for 19.0.0
+    >> Database DWHU has db_name of NDWHU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for DWHU
+      >> Database registration successful
+    
+    >>  Attempting to create pfile from spfile +ERPDATA/ERPU/PARAMETERFILE/spfile.267.1132101237
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database ERPU configured for 19.0.0
+    >> Database ERPU has db_name of NERPU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for ERPU
+      >> Database registration successful
+    
+    >>  Attempting to create pfile from spfile +FORECASTDATA/FCSTU/PARAMETERFILE/spfile.267.1132102107
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database FCSTU configured for 19.0.0
+    >> Database FCSTU has db_name of NFCSTU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for FCSTU
+      >> Database registration successful
+    
+    >>  Attempting to create pfile from spfile +SUPPLYDATA/SUPPLYU/PARAMETERFILE/spfile.267.1132102147
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database SUPPLYU configured for 19.0.0
+    >> Database SUPPLYU has db_name of NSUPPLYU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for SUPPLYU
+      >> Database registration successful
+    
+    >>  Attempting to create pfile from spfile +TSTDATA/TSTU/PARAMETERFILE/spfile.267.1132140189
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database TSTU configured for 19.0.0
+    >> Database TSTU has db_name of NTSTU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for TSTU
+      >> Database registration successful
+    
+    >>  Attempting to create pfile from spfile +UATDATA/UATU/PARAMETERFILE/spfile.267.1132140185
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database UATU configured for 19.0.0
+    >> Database UATU has db_name of NUATU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for UATU
+      >> Database registration successful
+    
+The output above showed the script first identifying all installed versions of Oracle Database on the server, followed by and attempt to create a pfile from the text spfile. The spfile cannot be reliably read directly. It must be converted to a text pfile first. In the unlikely event that a given version of Oracle was unable to read the spfile, another version of Oracle will be used. 
+
+Eventually, the version of Oracle for each database will be identified. Once this happens, a `srvctl add database` command is performed. You can see the "Database registration succesful" message above.
+
+The next step is mounting the databases. They cannot be directly opened because the state of the datafiles and the state of the log files do not match.
+    
+    Starting databases...
+    >> Mounting database HRU
+      >> Database mounted
+    >> Mounting database BIU
+      >> Database mounted
+    >> Mounting database CRMU
+      >> Database mounted
+    >> Mounting database DEVU
+      >> Database mounted
+    >> Mounting database DWHU
+      >> Database mounted
+    >> Mounting database ERPU
+      >> Database mounted
+    >> Mounting database FCSTU
+      >> Database mounted
+    >> Mounting database SUPPLYU
+      >> Database mounted
+    >> Mounting database TSTU
+      >> Database mounted
+    >> Mounting database UATU
+      >> Database mounted
+    
+The next step is issuing the recovery command. 
+
+In this case, the command is recover `database until time '2024-03-03 07:30:00';` That timestamp does *not* match the timestamp provided at the CLI exactly. The sqlplus command needs to use the local timezone of the server, which in this case was EST, five hours earlier than the 12:00 time provided at the CLI. 
+
+    Recovering databases...
+    >> Recovering database HRU
+    Media recovery complete.
+    >> Database HRU recovery complete
+    >> Recovering database BIU
+    Media recovery complete.
+    >> Database BIU recovery complete
+    >> Recovering database CRMU
+    Media recovery complete.
+    >> Database CRMU recovery complete
+    >> Recovering database DEVU
+    Media recovery complete.
+    >> Database DEVU recovery complete
+    >> Recovering database DWHU
+    Media recovery complete.
+    >> Database DWHU recovery complete
+    >> Recovering database ERPU
+    Media recovery complete.
+    >> Database ERPU recovery complete
+    >> Recovering database FCSTU
+    Media recovery complete.
+    >> Database FCSTU recovery complete
+    >> Recovering database SUPPLYU
+    Media recovery complete.
+    >> Database SUPPLYU recovery complete
+    >> Recovering database TSTU
+    Media recovery complete.
+    >> Database TSTU recovery complete
+    >> Recovering database UATU
+    Media recovery complete.
+    >> Database UATU recovery complete
+
+As long as recovery completed, the databases are then opened:
+
+    Opening databases...
+    >> Opening database HRU
+    >> Database HRU is open
+    >> Opening database BIU
+    >> Database BIU is open
+    >> Opening database CRMU
+    >> Database CRMU is open
+    >> Opening database DEVU
+    >> Database DEVU is open
+    >> Opening database DWHU
+    >> Database DWHU is open
+    >> Opening database ERPU
+    >> Database ERPU is open
+    >> Opening database FCSTU
+    >> Database FCSTU is open
+    >> Opening database SUPPLYU
+    >> Database SUPPLYU is open
+    >> Opening database TSTU
+    >> Database TSTU is open
+    >> Opening database UATU
+    >> Database UATU is open
+
+A final summary of confirmed failovers is then printed.
+
+    Results:
+    Database HRU failover complete
+    Database BIU failover complete
+    Database CRMU failover complete
+    Database DEVU failover complete
+    Database DWHU failover complete
+    Database ERPU failover complete
+    Database FCSTU failover complete
+    Database SUPPLYU failover complete
+    Database TSTU failover complete
+    Database UATU failover complete
+
+There are many options for how to complete this procedure. If you can think of something you'd like to see demonstrated, let me know, but the scripts themselves are intended to be modified as required and should be reasonably self-explanatory if you understand the logical workflow being performed.
     
 # NTAPlib module debug settings
+
+The following list shows the debug settings when using the NTAPlib modules. 
 
     0000 0001 | Show basic workflow information
     0000 0010 | Show REST output performed by doREST.py

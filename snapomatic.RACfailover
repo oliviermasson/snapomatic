@@ -63,7 +63,7 @@ scaniscsi=myopts.iscsi
 
 try:
     recoverypoint=myopts.recoverypoint
-    rmanrecoverysecs=recoverypoint+time.localtime().tm_gmtoff
+    rmanrecoverysecs=recoverypoint-time.localtime().tm_gmtoff
     rmanrecoverypoint=time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(rmanrecoverysecs))
 except:
     rmanrecoverypoint=False
@@ -430,7 +430,7 @@ for dbuname,oraclehome,oraclebase,oracleuser in mounted:
     recoverycomplete=False
     print(">> Recovering database " + dbuname)
     if rmanrecoverypoint:
-        out=doSqlplus(dbuname + '_1',"recover automatic until time '" + rmanrecoverypoint + "';",
+        out=doSqlplus(dbuname + '_1',"recover database until time '" + rmanrecoverypoint + "';",
                       user=oracleuser,
                       home=oraclehome,
                       base=oraclebase,

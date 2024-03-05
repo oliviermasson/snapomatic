@@ -31,7 +31,7 @@ if myopts.debug:
 if myopts.restdebug:
     debug=debug+2
 
-mypaths=discoverPaths.discoverPaths(myopts.target,debug=debug)
+mypaths=discoverPaths.discoverPaths(myopts.target,multipath=myopts.multipaths,debug=debug)
 mypaths.go()
 
 paths=list(mypaths.paths.keys())

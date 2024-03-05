@@ -52,7 +52,7 @@ class doSqlplus:
         else:
             import getOracleHome
             out = getOracleHome.getOracleHome(sid=self.sid,apicaller=localapi,debug=self.debug)
-            if out.home is None:
+            if not out.go():
                 self.result=1
                 self.reason="Unable to get ORACLE_HOME for " + self.sid
             else:
@@ -146,7 +146,7 @@ class doSqlplus:
                 self.errorflag=1
                 self.reason='Unable to get Oracle user for ' + self.home
             else:
-                self.username=out.user
+                self.user=out.user
                 checkuid = pwd.getpwnam(out.user).pw_uid
     
         if not checkuid == os.geteuid():

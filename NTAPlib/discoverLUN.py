@@ -21,6 +21,7 @@ class discoverLUN:
         self.protocol=None
         self.wwid=None
         self.mdalias=None
+        self.multipath=False
         self.debug=False
 
         self.apibase=self.__class__.__name__
@@ -32,6 +33,9 @@ class discoverLUN:
 
         if 'debug' in kwargs.keys():
             self.debug=kwargs['debug']
+
+        if 'multipath' in kwargs.keys():
+            self.multipath=kwargs['multipath']
 
         if self.debug & 1:
             userio.message('',service=localapi + ":INIT")
@@ -137,16 +141,23 @@ class discoverLUN:
             self.size=int(lunsize)
             self.blocksize=blocksize
 
-            multipathcmd=doProcess.doProcess("/usr/sbin/multipath -ll " + self.device,debug=self.debug)
-            if multipathcmd.result > 0:
-                self.reason="Cannot execute /usr/bin/multipath"
-                self.error=1
-                self.stderr=multipathcmd.stderr
-                return(False)
-            
-            wwid,alias = multipathcmd.stdout[0].split()[:2]
-            self.wwid=wwid
-            self.mdalias=alias
+            if self.multipath:
+                multipathcmd=doProcess.doProcess("/usr/sbin/multipath -ll " + self.device,debug=self.debug)
+                if multipathcmd.result > 0:
+                    self.reason="Cannot execute /usr/bin/multipath"
+                    self.error=1
+                    self.stderr=multipathcmd.stderr
+                    return(False)
+                
+                try:
+                    wwid,alias = multipathcmd.stdout[0].split()[:2]
+                    self.wwid=wwid
+                    self.mdalias=alias
+                except:
+                    self.reason="Error executing /usr/bin/multipath -ll " + self.device
+                    self.error=1
+                    self.stderr=multipathcmd.stderr
+                    return(False)
 
         else:
             result=1
