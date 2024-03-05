@@ -446,6 +446,7 @@ This is a more complicated workflow created for a customer POC. It illustrates s
 * Clone the volumes. Do NOT break the mirrors. This was required so DR can be tested without interrupting replication.
 * Create the clone of the target volumes to a timepoint that is immediately *after* or immediately *before* the desired recovery point. 
 * Map all LUNs
+* Bring up databases, but this action is performed by a 2nd script. Keep reading to find that example...
 
 This script works as follows:
 
@@ -510,12 +511,12 @@ As an example of running this at large scale, the following two commands could b
 
 
     [root@jfs0 current]# ./snapomatic.cloneSAN4DR --target jfs_dev2 'ora_DRcluster_.*dbf' \ 
-                                                  --recoverypoint 2024-02-20T12:30:00+0500 \
+                                                  --recoverypoint 2024-03-03T12:30:00+0500 \
                                                   --before \
                                                   --igrouptoken 2
     
     [root@jfs0 current]# ./snapomatic.cloneSAN4DR --target jfs_dev2 'ora_DRcluster_.*logs' \ 
-                                                  --recoverypoint 2024-02-20T12:30:00+0500 \
+                                                  --recoverypoint 2024-03-03T12:30:00+0500 \
                                                   --after \
                                                   --igrouptoken 2
 
@@ -586,6 +587,323 @@ The result of this two commands are the following LUNs, mapped, inside of cloned
     jfs_dev2 /vol/failover_ora_DRcluster_UAT_logs/LUN1
     60 entries were displayed.
     
+# snapomatic.RACfailover
+
+snapmatic.RACfailover --volpattern
+           (target volume pattern)
+
+           --recoverypoint
+           (recovery timestamp in YYYY-MM-DDTHH:MM:SS[TZ])
+
+            --debug
+           (print process STDOUT and STDERR)
+
+            --iscsi
+           (Scan for iSCSI LUNs)
+
+            --noscan
+           (Bypass LUN scanning)
+
+            --noafd
+           (Bypass ASM Filter Driver scanning)
+
+            --noasmlib
+           (Bypass ASMlib scanning)
+
+
+        [root@jfs8 current]# ./snapomatic.RACfailover --volpattern 'failover_ora_DRcluster_*' --iscsi --recoverypoint 2024-03-03T12:30:00+0500 --debug
+    Updating iSCSI targets
+    
+    Sleeping for 10 seconds while multipath maps are built
+    
+    Discovering AFD devices...
+    Refreshing AFD configuration
+    
+    Refreshing ASMlib configuration
+    Unable to scan ASMlib disks on host jfs8
+    Retrieving ASM diskgroup names
+    >> Identified diskgroup HRLOGS
+    >> Identified diskgroup DWHDATA
+    >> Identified diskgroup SUPPLYLOGS
+    >> Identified diskgroup CRMLOGS
+    >> Identified diskgroup UATDATA
+    >> Identified diskgroup DEVLOGS
+    >> Identified diskgroup TSTLOGS
+    >> Identified diskgroup ERPLOGS
+    >> Identified diskgroup FORECASTDATA
+    >> Identified diskgroup TSTDATA
+    >> Identified diskgroup DEVDATA
+    >> Identified diskgroup BILOGS
+    >> Identified diskgroup CRMDATA
+    >> Identified diskgroup HRDATA
+    >> Identified diskgroup FORECASTLOGS
+    >> Identified diskgroup SUPPLYDATA
+    >> Identified diskgroup ERPDATA
+    >> Identified diskgroup DWHLOGS
+    >> Identified diskgroup BIDATA
+    >> Identified diskgroup UATLOGS
+    
+    Identifying currently mounted ASM diskgroups
+    
+    Mounting ASM diskgroups...
+    Mounting HRLOGS on host jfs8
+    Mounting DWHDATA on host jfs8
+    Mounting SUPPLYLOGS on host jfs8
+    Mounting CRMLOGS on host jfs8
+    Mounting UATDATA on host jfs8
+    Mounting DEVLOGS on host jfs8
+    Mounting TSTLOGS on host jfs8
+    Mounting ERPLOGS on host jfs8
+    Mounting FORECASTDATA on host jfs8
+    Mounting TSTDATA on host jfs8
+    Mounting DEVDATA on host jfs8
+    Mounting BILOGS on host jfs8
+    Mounting CRMDATA on host jfs8
+    Mounting HRDATA on host jfs8
+    Mounting FORECASTLOGS on host jfs8
+    Mounting SUPPLYDATA on host jfs8
+    Mounting ERPDATA on host jfs8
+    Mounting DWHLOGS on host jfs8
+    Mounting BIDATA on host jfs8
+    Mounting UATLOGS on host jfs8
+    
+    Discovering contents of ASM diskgroup
+    Retrieving contents of diskgroups...
+    >> Running asmcmd...
+    >> Found directory HRU on diskgroup +HRDATA
+    >> Found directory BIU on diskgroup +BILOGS
+    >> Found directory CRMU on diskgroup +CRMLOGS
+    >> Found directory DEVU on diskgroup +DEVLOGS
+    >> Found directory DWHU on diskgroup +DWHLOGS
+    >> Found directory ERPU on diskgroup +ERPLOGS
+    >> Found directory FCSTU on diskgroup +FORECASTLOGS
+    >> Found directory HRU on diskgroup +HRLOGS
+    >> Found directory SUPPLYU on diskgroup +SUPPLYLOGS
+    >> Found directory TSTU on diskgroup +TSTLOGS
+    >> Found directory UATU on diskgroup +UATLOGS
+    >> Found directory BIU on diskgroup +BIDATA
+    >> Found directory CRMU on diskgroup +CRMDATA
+    >> Found directory DEVU on diskgroup +DEVDATA
+    >> Found directory DWHU on diskgroup +DWHDATA
+    >> Found directory ERPU on diskgroup +ERPDATA
+    >> Found directory FCSTU on diskgroup +FORECASTDATA
+    >> Found directory SUPPLYU on diskgroup +SUPPLYDATA
+    >> Found directory TSTU on diskgroup +TSTDATA
+    >> Found directory UATU on diskgroup +UATDATA
+    >> Found directory HRSU on diskgroup +HRDATA
+    Diskgroup map dictionary: {'HRU': {'DISKGROUPS': ['HRDATA', 'HRLOGS'], 'SPFILE': '+HRDATA/HRU/PARAMETERFILE/spfile.268.1144254031', 'PWFILE': '+HRDATA/HRU/PASSWORD/pwdhru.260.1144251699'}, 'BIU': {'DISKGROUPS': ['BILOGS', 'BIDATA'], 'SPFILE': '+BIDATA/BIU/PARAMETERFILE/spfile.267.1132063661', 'PWFILE': '+BIDATA/BIU/PASSWORD/pwdbiu.256.1132060049'}, 'CRMU': {'DISKGROUPS': ['CRMLOGS', 'CRMDATA'], 'SPFILE': '+CRMDATA/CRMU/PARAMETERFILE/spfile.259.1132093037', 'PWFILE': '+CRMDATA/CRMU/PASSWORD/pwdcrmu.266.1132089501'}, 'DEVU': {'DISKGROUPS': ['DEVLOGS', 'DEVDATA'], 'SPFILE': '+DEVDATA/DEVU/PARAMETERFILE/spfile.267.1132086883', 'PWFILE': '+DEVDATA/DEVU/PASSWORD/pwddevu.256.1132083315'}, 'DWHU': {'DISKGROUPS': ['DWHLOGS', 'DWHDATA'], 'SPFILE': '+DWHDATA/DWHU/PARAMETERFILE/spfile.267.1132093245', 'PWFILE': '+DWHDATA/DWHU/PASSWORD/pwddwhu.260.1132089715'}, 'ERPU': {'DISKGROUPS': ['ERPLOGS', 'ERPDATA'], 'SPFILE': '+ERPDATA/ERPU/PARAMETERFILE/spfile.267.1132101237', 'PWFILE': '+ERPDATA/ERPU/PASSWORD/pwderpu.256.1132097723'}, 'FCSTU': {'DISKGROUPS': ['FORECASTLOGS', 'FORECASTDATA'], 'SPFILE': '+FORECASTDATA/FCSTU/PARAMETERFILE/spfile.267.1132102107', 'PWFILE': '+FORECASTDATA/FCSTU/PASSWORD/pwdfcstu.256.1132098539'}, 'SUPPLYU': {'DISKGROUPS': ['SUPPLYLOGS', 'SUPPLYDATA'], 'SPFILE': '+SUPPLYDATA/SUPPLYU/PARAMETERFILE/spfile.267.1132102147', 'PWFILE': '+SUPPLYDATA/SUPPLYU/PASSWORD/pwdsupplyu.262.1132098635'}, 'TSTU': {'DISKGROUPS': ['TSTLOGS', 'TSTDATA'], 'SPFILE': '+TSTDATA/TSTU/PARAMETERFILE/spfile.267.1132140189', 'PWFILE': '+TSTDATA/TSTU/PASSWORD/pwdtstu.256.1132136553'}, 'UATU': {'DISKGROUPS': ['UATLOGS', 'UATDATA'], 'SPFILE': '+UATDATA/UATU/PARAMETERFILE/spfile.267.1132140185', 'PWFILE': '+UATDATA/UATU/PASSWORD/pwduatu.256.1132136561'}, 'HRSU': {'DISKGROUPS': ['HRDATA'], 'SPFILE': None, 'PWFILE': '+HRDATA/HRSU/PASSWORD/pwdhrsu.262.1144251215'}}
+    >> Identified database HRU
+    >> Identified database BIU
+    >> Identified database CRMU
+    >> Identified database DEVU
+    >> Identified database DWHU
+    >> Identified database ERPU
+    >> Identified database FCSTU
+    >> Identified database SUPPLYU
+    >> Identified database TSTU
+    >> Identified database UATU
+    
+    Oracle version map: {'19.0.0.0.0': '/orabin19', '19.18.0.0.0': '/orabin19'}
+    Extracting spfiles...
+    >>  Attempting to create pfile from spfile +HRDATA/HRU/PARAMETERFILE/spfile.268.1144254031
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database HRU configured for 19.0.0
+    >> Database HRU has db_name of NHRU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for HRU
+      >> Database registration successful
+    
+    >>  Attempting to create pfile from spfile +BIDATA/BIU/PARAMETERFILE/spfile.267.1132063661
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database BIU configured for 19.0.0
+    >> Database BIU has db_name of NBIU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for BIU
+      >> Database registration successful
+    
+    >>  Attempting to create pfile from spfile +CRMDATA/CRMU/PARAMETERFILE/spfile.259.1132093037
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database CRMU configured for 19.0.0
+    >> Database CRMU has db_name of NCRMU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for CRMU
+      >> Database registration successful
+    
+    >>  Attempting to create pfile from spfile +DEVDATA/DEVU/PARAMETERFILE/spfile.267.1132086883
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database DEVU configured for 19.0.0
+    >> Database DEVU has db_name of NDEVU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for DEVU
+      >> Database registration successful
+    
+    >>  Attempting to create pfile from spfile +DWHDATA/DWHU/PARAMETERFILE/spfile.267.1132093245
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database DWHU configured for 19.0.0
+    >> Database DWHU has db_name of NDWHU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for DWHU
+      >> Database registration successful
+    
+    >>  Attempting to create pfile from spfile +ERPDATA/ERPU/PARAMETERFILE/spfile.267.1132101237
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database ERPU configured for 19.0.0
+    >> Database ERPU has db_name of NERPU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for ERPU
+      >> Database registration successful
+    
+    >>  Attempting to create pfile from spfile +FORECASTDATA/FCSTU/PARAMETERFILE/spfile.267.1132102107
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database FCSTU configured for 19.0.0
+    >> Database FCSTU has db_name of NFCSTU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for FCSTU
+      >> Database registration successful
+    
+    >>  Attempting to create pfile from spfile +SUPPLYDATA/SUPPLYU/PARAMETERFILE/spfile.267.1132102147
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database SUPPLYU configured for 19.0.0
+    >> Database SUPPLYU has db_name of NSUPPLYU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for SUPPLYU
+      >> Database registration successful
+    
+    >>  Attempting to create pfile from spfile +TSTDATA/TSTU/PARAMETERFILE/spfile.267.1132140189
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database TSTU configured for 19.0.0
+    >> Database TSTU has db_name of NTSTU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for TSTU
+      >> Database registration successful
+    
+    >>  Attempting to create pfile from spfile +UATDATA/UATU/PARAMETERFILE/spfile.267.1132140185
+      >> Using ORACLE_HOME /orabin19
+      >> Parsing pfile
+    >> Database UATU configured for 19.0.0
+    >> Database UATU has db_name of NUATU
+      >> Compatible ORACLE_HOME found at /orabin19
+    >> Creating directory structure
+      >> Running mkdir commands on host jfs8
+    >> Running svrctl add for UATU
+      >> Database registration successful
+    
+    
+    Starting databases...
+    >> Mounting database HRU
+      >> Database mounted
+    >> Mounting database BIU
+      >> Database mounted
+    >> Mounting database CRMU
+      >> Database mounted
+    >> Mounting database DEVU
+      >> Database mounted
+    >> Mounting database DWHU
+      >> Database mounted
+    >> Mounting database ERPU
+      >> Database mounted
+    >> Mounting database FCSTU
+      >> Database mounted
+    >> Mounting database SUPPLYU
+      >> Database mounted
+    >> Mounting database TSTU
+      >> Database mounted
+    >> Mounting database UATU
+      >> Database mounted
+    
+    Recovering databases...
+    >> Recovering database HRU
+    Media recovery complete.
+    >> Database HRU recovery complete
+    >> Recovering database BIU
+    Media recovery complete.
+    >> Database BIU recovery complete
+    >> Recovering database CRMU
+    Media recovery complete.
+    >> Database CRMU recovery complete
+    >> Recovering database DEVU
+    Media recovery complete.
+    >> Database DEVU recovery complete
+    >> Recovering database DWHU
+    Media recovery complete.
+    >> Database DWHU recovery complete
+    >> Recovering database ERPU
+    Media recovery complete.
+    >> Database ERPU recovery complete
+    >> Recovering database FCSTU
+    Media recovery complete.
+    >> Database FCSTU recovery complete
+    >> Recovering database SUPPLYU
+    Media recovery complete.
+    >> Database SUPPLYU recovery complete
+    >> Recovering database TSTU
+    Media recovery complete.
+    >> Database TSTU recovery complete
+    >> Recovering database UATU
+    Media recovery complete.
+    >> Database UATU recovery complete
+    
+    Opening databases...
+    >> Opening database HRU
+    >> Database HRU is open
+    >> Opening database BIU
+    >> Database BIU is open
+    >> Opening database CRMU
+    >> Database CRMU is open
+    >> Opening database DEVU
+    >> Database DEVU is open
+    >> Opening database DWHU
+    >> Database DWHU is open
+    >> Opening database ERPU
+    >> Database ERPU is open
+    >> Opening database FCSTU
+    >> Database FCSTU is open
+    >> Opening database SUPPLYU
+    >> Database SUPPLYU is open
+    >> Opening database TSTU
+    >> Database TSTU is open
+    >> Opening database UATU
+    >> Database UATU is open
+    
+    Results:
+    Database HRU failover complete
+    Database BIU failover complete
+    Database CRMU failover complete
+    Database DEVU failover complete
+    Database DWHU failover complete
+    Database ERPU failover complete
+    Database FCSTU failover complete
+    Database SUPPLYU failover complete
+    Database TSTU failover complete
+    Database UATU failover complete
+
     
 # NTAPlib module debug settings
 

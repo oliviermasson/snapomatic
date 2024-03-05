@@ -23,6 +23,7 @@ class discoverPaths:
         self.blockdevices={}
         self.fsdevices={}
         self.unknown=[]
+        self.multipath=False
         self.debug=False
 
         self.apibase=self.__class__.__name__
@@ -37,6 +38,9 @@ class discoverPaths:
 
         if self.debug & 1:
             userio.message('',service=localapi + ":INIT")
+
+        if 'multipath' in kwargs.keys():
+            self.multipath=kwargs['multipath']
         
     def showDebug(self):
         userio.debug(self)
@@ -91,7 +95,7 @@ class discoverPaths:
             device=self.paths[item]['device']
             if self.paths[item]['fstype'] == 'block':
                 if device not in self.luns.keys():
-                    nextlun=discoverLUN(device,debug=self.debug,apicaller=localapi)
+                    nextlun=discoverLUN(device,multipath=self.multipath,debug=self.debug,apicaller=localapi)
                     if not nextlun.go():
                         del self.paths[item]
                         self.unknown.append(item)

@@ -71,7 +71,7 @@ class destroyVolumes:
                 running=False
 
 
-        if jobrest.result > 0 or not jobrest.response['state'] == 'success':
+        if not jobrest.result == 200 or not jobrest.response['state'] == 'success':
             self.result=1
             self.reason="Failed to destroy " + self.volume
             self.stdout=self.stdout + jobrest.stdout
