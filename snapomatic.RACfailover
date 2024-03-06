@@ -20,7 +20,7 @@ import time
 
 snapomaticversion='DEV'
 
-validoptions={'volpattern':'str','recoverypoint':'timestamp','snapshot_optimized':'bool','debug':'bool','noscan':'bool','noafd':'bool','noasmlib':'bool','iscsi':'bool'}
+validoptions={'volpattern':'str','recoverypoint':'timestamp','snapshot-optimized':'bool','debug':'bool','noscan':'bool','noafd':'bool','noasmlib':'bool','iscsi':'bool'}
 requiredoptions=['volpattern']
 
 usage="Version " + snapomaticversion + "\n" + \
@@ -28,7 +28,7 @@ usage="Version " + snapomaticversion + "\n" + \
       "           (target volume pattern)\n\n" + \
       "           --recoverypoint\n" + \
       "           (recovery timestamp in YYYY-MM-DDTHH:MM:SS[TZ])\n\n" + \
-      "           --snapshot_optimized\n" + \
+      "           --snapshot-optimized\n" + \
       "           (use snapshot-optimized recovery procedure instead of backup mode procedure)\n\n" + \
       "            --debug\n" + \
       "           (print process STDOUT and STDERR)\n\n" + \
