@@ -126,7 +126,7 @@ def changeUser(user, **kwargs):
 class doProcess():
 
     def showDebug(self):
-        userio.debug()
+        userio.debug(self)
 
     def __init__(self,command,**kwargs):
         mypath = "/bin:/usr/bin:/usr/local/bin"
@@ -145,6 +145,9 @@ class doProcess():
         self.binary=False
         self.env = {"PATH": mypath, "LD_LIBRARY_PATH": myldlibrarypath}
         self.startblock=0
+         
+        self.apibase=self.__class__.__name__
+
 
         if 'debug' in kwargs.keys():
             self.debug = kwargs['debug']
@@ -200,5 +203,11 @@ class doProcess():
     
         if 'displaystdin' in kwargs.keys():
             self.startblock=kwargs['displaystdin']
+
+        if 'apicaller' in kwargs.keys():
+            self.apicaller=kwargs['apicaller']
+        else:
+            self.apicaller=''
+
         
         execute(self)

@@ -20,8 +20,9 @@ snapomaticversion='DEV'
 
 validoptions={'target':'multistr',
               'igrouptoken':'int',
-              'snapshot_prefix':'str',
+              'snapshot-prefix':'str',
               'igroupname':'str',
+              'skew':'int',
               'split':'bool',
               'nosleep':'bool',
               'debug':'bool',
@@ -37,8 +38,8 @@ usage="Version " + snapomaticversion + "\n" + \
       "clone4DR --target\n" + \
       "          (name of target svm and volumes)\n" + \
       "          (syntax: svm volume or svm volume/lun, wildcards accepted)\n\n" + \
-      "          --snapshot_prefix\n" + \
-      "          (optionally restrict search to snapshots with a prefix_ syntax)\n" + \
+      "          --snapshot-prefix\n" + \
+      "          (optionally restrict search to snapshots with a prefix* syntax)\n\n" + \
       "          --igrouptoken\n" + \
       "          (identifies the _ delimited position of the igroup)\n\n" + \
       "          --recoverypoint\n" + \
@@ -47,6 +48,8 @@ usage="Version " + snapomaticversion + "\n" + \
       "          (used with --recoverypoint)\n" + \
       "          (look for snapshots before|after specified recoverypoint)\n" + \
       "          (default behavior is AFTER)\n\n" + \
+      "          --skew\n" + \
+      "          (maximum time difference between cloned volumes, seconds)\n\n" + \
       "          [--igroupname]\n" + \
       "          (optionally specifies the igroup name, %=token\n\n" + \
       "          [--split]\n" + \
@@ -65,7 +68,6 @@ if len(myopts.target) == 1:
 else:
     for item in myopts.target[1:]:
         pieces=item.split('/')
-        print(pieces)
         if pieces[0] not in voltargets.keys():
             voltargets[pieces[0]] = []
         if len(pieces) == 1:
@@ -125,48 +127,100 @@ userio.message()
 
 userio.linefeed()
 userio.message("Retrieving snapshots...")
-snapshots=getSnapshots(svm,volumes=clonelist,debug=debug)
+if prefix:
+    snapshots=getSnapshots(svm,volumes=clonelist,name=prefix + "*", debug=debug)
+else:
+    snapshots=getSnapshots(svm,volumes=clonelist,debug=debug)
 if not snapshots.go():
     snapshots.showDebug()
 
 for vol in clonelist:
     if vol in snapshots.snapshots.keys():
-        userio.message("Most recent snapshot on volume " + vol + ":")
-        userio.message(">> " + snapshots.snapshots[vol]['recent'])
+        try:
+            userio.message("Most recent snapshot on volume " + vol + ":")
+            userio.message(">> " + snapshots.snapshots[vol]['recent'])
+        except:
+            userio.message("No matching snapshots on volume " + vol + ":")
     else:
         userio.message("No matching snapshots found on volume " + vol)
     userio.message()
 
 userio.linefeed()
 clonetargets={}
+unable2clone=[]
+ready2clone=[]
 userio.message("Verifying snapshot state matches requirements...")
 for vol in clonelist:
     snapshot2clone=False
     timestamp=False
     if not recoverytarget:
-        snapshot2clone=snapshots.snapshots[vol]['recent']
-        userio.message("Volume " + vol + \
-              " most recent snapshot is " + \
-              snapshots.snapshots[vol]['snapshots'][recent]['date'])
+        if len(snapshots.snapshots[vol]['ordered']) > 0:
+            snapshot2clone=snapshots.snapshots[vol]['recent']
+            userio.message("Volume " + vol + " most recent snapshot is " + \
+            snapshots.snapshots[vol]['snapshots'][snapshots.snapshots[vol]['recent']]['createtime'])
+            clonetargets[vol]=snapshots.snapshots[vol]['snapshots'][snapshot2clone]
+            ready2clone.append([vol,snapshot2clone])
+        else:
+            userio.message("Unable to find snapshot for " + vol + " that matches requested recoverypoint")
+            unable2clone.append(vol)
     else:
-        for x in range(0,len(snapshots.snapshots[vol]['ordered'])-1):
+#        print("Recovery point:" + str(recoverytarget))
+        for x in range(0,len(snapshots.snapshots[vol]['ordered'])):
+#            print("Snapshot:" + str(snapshots.snapshots[vol]['ordered'][x]))
+#            print("Delta: " + str(snapshots.snapshots[vol]['ordered'][x][1] - recoverytarget))
             if recoverBefore:
-                if snapshots.snapshots[vol]['ordered'][x][1] > recoverytarget \
-                   and snapshots.snapshots[vol]['ordered'][x+1][1] < recoverytarget:
-                        timestamp=snapshots.snapshots[vol]['snapshots'][snapshots.snapshots[vol]['ordered'][x+1][0]]['epoch']
-                        snapshot2clone=snapshots.snapshots[vol]['ordered'][x+1][0]
+                if snapshots.snapshots[vol]['ordered'][x][1] < recoverytarget \
+                   and (len(snapshots.snapshots[vol]['ordered']) == x + 1 \
+                   or snapshots.snapshots[vol]['ordered'][x+1][1] > recoverytarget):
+                        timestamp=snapshots.snapshots[vol]['snapshots'][snapshots.snapshots[vol]['ordered'][x][0]]['epoch']
+                        snapshot2clone=snapshots.snapshots[vol]['ordered'][x][0]
                         break
             else:
                 if snapshots.snapshots[vol]['ordered'][x][1] > recoverytarget \
-                   and snapshots.snapshots[vol]['ordered'][x+1][1] < recoverytarget:
+                   and (len(snapshots.snapshots[vol]['ordered']) == x + 1 \
+                   or snapshots.snapshots[vol]['ordered'][x-1][1] < recoverytarget):
                         timestamp=snapshots.snapshots[vol]['snapshots'][snapshots.snapshots[vol]['ordered'][x][0]]['epoch']
                         snapshot2clone=snapshots.snapshots[vol]['ordered'][x][0]
                         break
         if snapshot2clone:
             userio.message("Snapshot "+ vol + ":" + snapshot2clone + " with timestamp " + snapshots.snapshots[vol]['snapshots'][snapshot2clone]['date'] + " meets recovery target")
-            clonetargets[vol]=snapshots.snapshots[vol]['snapshots'][snapshot2clone]['uuid']
+            clonetargets[vol]=snapshots.snapshots[vol]['snapshots'][snapshot2clone]
+            ready2clone.append([vol,snapshot2clone])
         else:
-            userio.message("Unable to find snapshot matching requested recoverypoint")
+            userio.message("Unable to find snapshot for " + vol + " that matches requested recoverypoint")
+            unable2clone.append(vol)
+
+if len(ready2clone) < 1:
+    userio.fail("No matching volumes detected")
+
+if len(unable2clone) > 0:
+    userio.linefeed()
+    if len(ready2clone) > 0:
+        userio.message("The following volumes are scheduled for cloning")
+        for vol,snapshot in ready2clone:
+            userio.message(">> " + vol + ":" + snapshot)
+    userio.warn("The following volumes do not have snapshot matching requested recoverypoint")
+    for vol in unable2clone:
+        userio.message(">> " + vol)
+    if not userio.yesno("Proceed?"):
+        userio.message("Exiting...")
+        sys.exit(0)
+
+if myopts.skew:
+    userio.linefeed()
+    userio.message("User specified a maximum skew of " + str(myopts.skew) + " seconds")
+    skews=[]
+    for vol in clonetargets.keys():
+        skews.append([vol,clonetargets[vol]['name'],clonetargets[vol]['date'],clonetargets[vol]['epoch']])
+    skewgrid=sorted(skews,key=lambda x: int(x[3]))
+    skew=int(skewgrid[-1][3] - skewgrid[0][3])
+    skewgrid.insert(0,['Volume','Snapshot','Date','Epoch seconds'])
+    userio.grid(skewgrid)
+    if skew > myopts.skew:
+        userio.warn("Difference in available snapshots exceeds skew time")
+        if not userio.yesno("Proceed?"):
+            userio.message("Exiting...")
+            sys.exit(0)
 
 luns2clone=[]
 volumes2clone=[]
@@ -204,13 +258,18 @@ userio.message("Cloning volumes...")
 clonecompleted=[]
 clonefailed=[]
 for vol in volumes2clone:
-    clone=cloneVolumes(svm,(vol,"failover_"+ vol,clonetargets[vol]),uuid=True,split=splitclones,debug=debug)
+    clone=cloneVolumes(svm,(vol,"failover_"+ vol,clonetargets[vol]['uuid']),uuid=True,split=splitclones,debug=debug)
     if not clone.go():
         clone.showDebug()
         clonefailed.append(vol)
     else:
         clonecompleted.append(vol + "failover_")
 userio.message()
+
+if not nosleep:
+    userio.message("Sleeping 10 seconds for LUN registration to complete")
+    time.sleep(10)
+    userio.message()
 
 for lun in luns2clone:
     lunpath=lun.split('/')
@@ -226,8 +285,4 @@ for lun in luns2clone:
     if not mapping.go():
         mapping.showDebug()
 
-if not nosleep:
-    userio.message("Sleeping 10 seconds for LUN registration to complete")
-    time.sleep(10)
-    userio.message()
 
