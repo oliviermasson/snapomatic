@@ -20,7 +20,7 @@ snapomaticversion='DEV'
 
 validoptions={'target':'multistr',
               'igrouptoken':'int',
-              'snapshot_prefix':'str',
+              'snapshot-prefix':'str',
               'igroupname':'str',
               'skew':'int',
               'split':'bool',
@@ -38,8 +38,8 @@ usage="Version " + snapomaticversion + "\n" + \
       "clone4DR --target\n" + \
       "          (name of target svm and volumes)\n" + \
       "          (syntax: svm volume or svm volume/lun, wildcards accepted)\n\n" + \
-      "          --snapshot_prefix\n" + \
-      "          (optionally restrict search to snapshots with a prefix_ syntax)\n\n" + \
+      "          --snapshot-prefix\n" + \
+      "          (optionally restrict search to snapshots with a prefix* syntax)\n\n" + \
       "          --igrouptoken\n" + \
       "          (identifies the _ delimited position of the igroup)\n\n" + \
       "          --recoverypoint\n" + \
@@ -154,10 +154,15 @@ for vol in clonelist:
     snapshot2clone=False
     timestamp=False
     if not recoverytarget:
-        snapshot2clone=snapshots.snapshots[vol]['recent']
-        userio.message("Volume " + vol + \
-              " most recent snapshot is " + \
-              snapshots.snapshots[vol]['snapshots'][snapshots.snapshots[vol]['recent']]['createtime'])
+        if len(snapshots.snapshots[vol]['ordered']) > 0:
+            snapshot2clone=snapshots.snapshots[vol]['recent']
+            userio.message("Volume " + vol + " most recent snapshot is " + \
+            snapshots.snapshots[vol]['snapshots'][snapshots.snapshots[vol]['recent']]['createtime'])
+            clonetargets[vol]=snapshots.snapshots[vol]['snapshots'][snapshot2clone]
+            ready2clone.append([vol,snapshot2clone])
+        else:
+            userio.message("Unable to find snapshot for " + vol + " that matches requested recoverypoint")
+            unable2clone.append(vol)
     else:
 #        print("Recovery point:" + str(recoverytarget))
         for x in range(0,len(snapshots.snapshots[vol]['ordered'])):
@@ -248,7 +253,6 @@ for volume in clonetargets.keys():
 
 volumes2clone=list(set(volumes2clone))
 
-
 userio.linefeed()
 userio.message("Cloning volumes...")
 clonecompleted=[]
@@ -261,6 +265,11 @@ for vol in volumes2clone:
     else:
         clonecompleted.append(vol + "failover_")
 userio.message()
+
+if not nosleep:
+    userio.message("Sleeping 10 seconds for LUN registration to complete")
+    time.sleep(10)
+    userio.message()
 
 for lun in luns2clone:
     lunpath=lun.split('/')
@@ -276,8 +285,4 @@ for lun in luns2clone:
     if not mapping.go():
         mapping.showDebug()
 
-if not nosleep:
-    userio.message("Sleeping 10 seconds for LUN registration to complete")
-    time.sleep(10)
-    userio.message()
 
