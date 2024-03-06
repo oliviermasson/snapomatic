@@ -182,6 +182,7 @@ class getSnapshots:
                         epoch=datetime.datetime.strptime(fmttime,'%Y-%m-%d %H:%M:%S%z').timestamp()
     
                         self.snapshots[volume]['snapshots'][name]={'createtime':createtime,
+                                                                   'name':name,
                                                                    'epoch':epoch,
                                                                    'date':fmttime,
                                                                    'uuid':uuid}

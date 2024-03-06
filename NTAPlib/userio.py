@@ -391,20 +391,20 @@ def grid(listoflists,**kwargs):
     totalrows=len(listoflists)
     columnwidths={}
     for x in range(0,totalcolumns):
-        columnwidths[x]=len(listoflists[0][x])
+        columnwidths[x]=len(str((listoflists[0][x])))
     for y in range(0,totalrows):
         for x in range(0,totalcolumns):
-            if listoflists[y][x] is not None and len(listoflists[y][x]) > columnwidths[x]:
+            if listoflists[y][x] is not None and len(str(listoflists[y][x])) > columnwidths[x]:
                 columnwidths[x] = len(listoflists[y][x])
     firstline=''
     secondline=''
     if 'noheader' in kwargs.keys() and kwargs['noheader']:
         for x in range(0,totalcolumns):
-            firstline=firstline + listoflists[0][x] + " " * (columnwidths[x] - len(listoflists[0][x]) + 1) 
+            firstline=firstline + str(listoflists[0][x]) + " " * (columnwidths[x] - len(str(listoflists[0][x])) + 1) 
         message(firstline.rstrip(),service=service)
     else:
         for x in range(0,totalcolumns):
-            firstline=firstline + listoflists[0][x].upper() + " " * (columnwidths[x] - len(listoflists[0][x]) + 1) 
+            firstline=firstline + str(listoflists[0][x]).upper() + " " * (columnwidths[x] - len(str(listoflists[0][x])) + 1) 
             secondline=secondline + '-' * columnwidths[x] + " "
         message(firstline.rstrip(),service=service)
         message(secondline.rstrip(),service=service)
@@ -412,11 +412,11 @@ def grid(listoflists,**kwargs):
         nextline=''
         for x in range(0,totalcolumns):
             if listoflists[y][x] is not None:
-                nextline=nextline + listoflists[y][x]
+                nextline=nextline + str(listoflists[y][x])
             if listoflists[y][x] is None:
                 nextline=nextline + " " * (columnwidths[x]  + 1) 
             else:
-                nextline=nextline + " " * (columnwidths[x] - len(listoflists[y][x]) + 1) 
+                nextline=nextline + " " * (columnwidths[x] - len(str(listoflists[y][x])) + 1) 
         message(nextline.rstrip(),service=service)
 
 def duration2seconds(value):
