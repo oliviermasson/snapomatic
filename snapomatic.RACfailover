@@ -67,7 +67,7 @@ try:
     recoverypoint=myopts.recoverypoint
     rmanrecoverysecs=recoverypoint-time.localtime().tm_gmtoff
     rmanrecoverypoint=time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(rmanrecoverysecs))
-    snapshottime=time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(rmanrecoverysecs-1))
+    snapshottime=time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(rmanrecoverysecs-15))
 except:
     rmanrecoverypoint=False
 

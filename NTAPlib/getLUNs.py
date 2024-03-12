@@ -32,6 +32,7 @@ class getLUNs:
                  'svm.name,' + \
                  'svm.uuid,' + \
                  'os_type,' + \
+                 'serial_number,' + \
                  'status.state,' + \
                  '&svm.name=' + svm \
         
