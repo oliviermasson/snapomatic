@@ -251,6 +251,8 @@ for volume in clonetargets.keys():
             luns2clone.append(lun)
             volumes2clone.append(lun.split('/')[2])
 
+sys.exit(0)
+
 volumes2clone=list(set(volumes2clone))
 
 userio.linefeed()
