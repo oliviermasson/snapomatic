@@ -599,6 +599,9 @@ Syntax:
               --recoverypoint
               (recovery timestamp in YYYY-MM-DDTHH:MM:SS[TZ])
 
+              --snapshot-optimized
+              (use snapshot-optimized recovery procedure instead of backup mode procedure)
+
                 --debug
               (print process STDOUT and STDERR)
 
@@ -614,6 +617,12 @@ Syntax:
                 --noasmlib
               (Bypass ASMlib scanning)
 
+
+Most of those arguments should be self-explanatory, but one requires some explanation. The --snapshot-optimized and --recoverypoint work together to perform recovery in a different way.
+
+1. If --recoverypoint is not specified, then the script will issue a "recover automatic;" operation, which will recover all available archive logs and redo logs.
+2. If you specify --recoverypoint and --snapshot-optimized, the script will assume datafiles are not in backup mode and  attempt "recover database until time YYYY-MM-DD HH:MM:SS snapshot time YYYY-MM-DD HH:MM:SS"
+3. If you specify --recoverypoint without --snapshot-optimized, the script will assume datafiles are in backup mode and it will attempt a normal "recover database until time YYYY-MM-DD HH:MM:SS" operation.
 
 The following output shows the results of completing the failover of the 10 databases that were cloned in the clone4DR step.
 
