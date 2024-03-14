@@ -60,14 +60,15 @@ for path in paths:
                              mypaths.luns[pvs[x]].path.split('/')[-1],
                              '',''])
     elif mypaths.paths[path]['fstype'] in ['nfs','nfs4']:
-        pathgrid.append([path,
-                         mypaths.paths[path]['mountpoint'],
-                         mypaths.paths[path]['fstype'],
-                         '','','',
-                         mypaths.nfs[mypaths.paths[path]['device']]['volumes']['svm']['name'],
-                         mypaths.nfs[mypaths.paths[path]['device']]['volumes']['junction-path'],
-                         mypaths.nfs[mypaths.paths[path]['device']]['volumes']['name'],
-                         ''])
+        for vol in mypaths.nfsvolumes[mypaths.paths[path]['device']]['volumes'].keys():
+            pathgrid.append([path,
+                             mypaths.paths[path]['mountpoint'],
+                             mypaths.paths[path]['fstype'],
+                             '','','',
+                             mypaths.nfsvolumes[mypaths.paths[path]['device']]['volumes'][vol]['svm']['name'],
+                             mypaths.nfsvolumes[mypaths.paths[path]['device']]['volumes'][vol]['junction-path'],
+                             mypaths.nfsvolumes[mypaths.paths[path]['device']]['volumes'][vol]['name'],
+                             ''])
     elif mypaths.paths[path]['fstype'] == 'block':
         pathgrid.append([path,
                          '',
