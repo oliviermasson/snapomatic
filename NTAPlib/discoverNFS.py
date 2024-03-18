@@ -90,7 +90,7 @@ class discoverNFS:
 
                 for path in fsinfo.keys():
                     if fsinfo[path]['device'] == (servername, junctionpath):
-                        self.nfs[(servername,junctionpath)] = {'volumes':self.svms[svm]['volumes'][volname]}
+                        self.nfs[(servername,junctionpath)] = {'volumes':{volname:self.svms[svm]['volumes'][volname]}}
                         break
 
         for path in self.paths:

@@ -11,6 +11,8 @@ import stopOracleInstance
 import mountOracleInstance
 import openOracleInstance
 import discoverOracle
+import discoverPaths
+import discoverASM
 import userio
 
 snapomaticversion='DEV'
@@ -20,6 +22,16 @@ validoptions={'backup':    {'sid':'multistr', \
                             'start':'bool',\
                             'debug':'bool',\
                             'force':'bool'},
+              'protect' :  {'sid':'multistr', \
+                            'nobackupmode': 'bool', \
+                            'datafiles': 'bool', \
+                            'snapshot': 'str', \
+                            'prefix': 'str', \
+                            'logs': 'bool', \
+                            'maxcount': 'bool', \
+                            'maxage': 'bool', \
+                            'datafiles': 'bool', \
+                            'debug':'bool'},\
               'start' :    {'sid':'multistr', \
                             'mount': 'bool', \
                             'nomount': 'bool', \
@@ -37,11 +49,12 @@ validoptions={'backup':    {'sid':'multistr', \
 requiredoptions={'backup' : ['sid',['start','stop']], \
                  'start' : ['sid'],\
                  'stop' : ['sid'],\
+                 'protect' : ['sid',['snapshot','prefix']], \
                  'mount' : ['sid'],\
                  'open' : ['sid'],\
                  'discover' : ['sid']}\
 
-mutex=[['start','stop'],['mount','nomount']]
+mutex=[['start','stop'],['mount','nomount'],['name'],['prefix'],['datafilesonly','logsonly']]
 
 usage="Version " + snapomaticversion + "\n" + \
       "backup   [--sid]\n" + \
@@ -52,6 +65,26 @@ usage="Version " + snapomaticversion + "\n" + \
       "         (ignore current backup state of datafiles)\n\n" \
       "         [--debug]\n" + \
       "         (show debug output)\n\n" + \
+      "protect  [--sid]\n" + \
+      "         (name(s) of database SIDs\n\n" + \
+      "         [--nobackupmode]\n" + \
+      "         (Do not use backup mode; use snapshot-optimized logic)\n\n" \
+      "         [--datafilesonly]\n" + \
+      "         (Protect datafiles only)\n\n" \
+      "         [--logsonly]\n" + \
+      "         (Protect redo/arch/ctrl only)\n\n" \
+      "         [--snapshot||prefix]\n" + \
+      "         (Name or prefix for snapshot)\n\n" + \
+      "         [--label|]\n" + \
+      "         (Snapmirror label for the snapshot)\n\n" + \
+      "         [--maxcount]\n" + \
+      "         (Optional. Maximum number of snapshots to retain)\n\n" + \
+      "         [--maxage]\n" + \
+      "         (Optional. Maximum age of snapshots to retain.\n" + \
+      "         [--debug]\n" + \
+      "         (show debug output)\n\n" + \
+      "         [--restdebug]\n" + \
+      "         (show REST API debug output)\n\n" + \
       "start    [--sid]\n" + \
       "         (name(s) of database SIDs\n\n" + \
       "         [--mount]\n" + \
@@ -194,3 +227,141 @@ if myopts.mode == 'discover':
 
     else:
         userio.warn(info.reason)
+
+if myopts.mode == 'protect':
+    sid=sidlist
+    discoveredSID={}
+    undiscoveredSID=[]
+    for sid in sidlist:
+        info=discoverOracle.discoverOracle(sid,debug=debug)
+        if info.go():
+            if debug & 1:
+                grid=[['Datafile','File#','Size','Backup']]
+                itemlist=list(info.datafiles.keys())
+                itemlist.sort()
+                for item in itemlist:
+                    grid.append([item,info.datafiles[item]['fileno'],info.datafiles[item]['size'],str(info.datafiles[item]['backup'])])
+                userio.grid(grid)
+                userio.linefeed()
+        
+                grid=[['Archive log destination']]
+                itemlist=list(info.arch.keys())
+                itemlist.sort()
+                for item in itemlist:
+                    grid.append([item])
+                userio.grid(grid)
+                userio.linefeed()
+        
+                grid=[['Redo log','Group#','Thread#','Size']]
+                itemlist=list(info.redo.keys())
+                itemlist.sort()
+                for item in itemlist:
+                    grid.append([item,info.redo[item]['group'],info.redo[item]['thread'],info.redo[item]['size']])
+                userio.grid(grid)
+                userio.linefeed()
+        
+                grid=[['Control file']]
+                itemlist=list(info.ctrl.keys())
+                itemlist.sort()
+                for item in itemlist:
+                    grid.append([item])
+                userio.grid(grid)
+                userio.linefeed()
+                
+                grid=[['Parameter','Value']]
+                itemlist=list(info.pfile.keys())
+                itemlist.sort()
+                for item in itemlist:
+                    grid.append([item,info.pfile[item]])
+                userio.grid(grid)
+                userio.linefeed()
+            discoveredSID[sid]=info
+        else:
+            userio.warn(info.reason)
+            undiscoveredSID.append(sid)
+
+    datafilevol4snapshot={}
+    logvol4snapshot={}
+    for sid in discoveredSID.keys():
+        newdatafilefs=list(discoveredSID[sid].datafiles.keys())
+        mypaths=discoverPaths.discoverPaths(newdatafilefs,debug=debug)
+        mypaths.go()
+        if len(mypaths.unknown):
+            userio.warn("Unable to resolve paths for " + sid + ":" + ','.join(mypaths.unknown))
+            undiscoveredSID.append(sid)
+        else:
+            for device in mypaths.allvolumes.keys():
+                datafilevol4snapshot[device]=mypaths.allvolumes[device]
+    for sid in undiscoveredSID:
+        del discoveredSID[sid]
+
+    for sid in discoveredSID.keys():
+        newlogfs=list(discoveredSID[sid].arch.keys()) + list(discoveredSID[sid].redo.keys()) + list(discoveredSID[sid].ctrl.keys())
+        mypaths=discoverPaths.discoverPaths(newlogfs,debug=debug)
+        mypaths.go()
+        if len(mypaths.unknown):
+            userio.warn("Unable to resolve paths for " + sid + ":".join(mypaths.unknown))
+            del discoveredSID[sid]
+            undiscoveredSID.append[sid]
+        else:
+            for device in mypaths.allvolumes.keys():
+                logvol4snapshot[device]=mypaths.allvolumes[device]
+    undiscoveredSID=set(undiscoveredSID)
+    
+    backupmode=[]
+    if myopts.nobackupmode:
+        for sid in discoveredSID.keys():
+            userio.message("Bypassing backup mode for " + sid)
+    else:
+        for sid in discoveredSID.keys():
+            change=setOracleBackup.setOracleBackup(sid,debug=debug)
+            if change.go(True):
+                userio.message(sid + " is now in backup mode ")
+                backupmode.append(sid)
+            else:
+                userio.warn(change.reason)
+
+    if len(discoveredSID) < 1:
+        userio.fail("No requested databases exist")
+
+    cgrequired=False
+    if len(datafilevol4snapshot.keys()) > 1:
+        cgrequired=True
+    else:
+        for svm in datafilevol4snapshot.keys():
+            if len(datafilevol4snapshot[svm]) > 1:
+                cgrequired=True
+                break
+
+    if cgrequired:
+        userio.message("Multiple datafile volumes detected, CG required")
+    else:
+        userio.message("Single volume for datafiles detected, no CG required")
+                
+    if not myopts.nobackupmode:
+        for sid in discoveredSID.keys():
+            change=setOracleBackup.setOracleBackup(sid,debug=debug)
+            if change.go(False):
+                userio.message(sid + " removed from backup mode ")
+            else:
+                userio.warn(change.reason)
+    
+    cgrequired=False
+    if len(logvol4snapshot.keys()) > 1:
+        cgrequired=True
+    else:
+        for svm in logvol4snapshot.keys():
+            if len(logvol4snapshot[svm]) > 1:
+                cgrequired=True
+                break
+    if cgrequired:
+        userio.message("Multiple log volumes detected, CG required")
+    else:
+        userio.message("Single volume for log detected, no CG required")
+
+    print(test.devices)
+    print(datafilevol4snapshot)
+    print(logvol4snapshot)
+
+
+        

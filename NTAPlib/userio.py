@@ -21,6 +21,15 @@ def randomtoken(*args):
     else:
         return(tokens)
 
+def mklist(item):
+    if type(item) is str or type(item) is int or type(item) is float:
+        return([item])
+    elif type(item) is list:
+        return(item)
+    elif type(item) is dict:
+        return(list(item.dict.keys()))
+    else:
+        fail("Illegal type passed to mklist")
 
 def checkdate(field):
     try:

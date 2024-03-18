@@ -15,7 +15,6 @@ class discoverLUN:
         self.path=None
         self.type=None
         self.volume=None
-        self.uuid=None
         self.size=None
         self.blocksize=None
         self.protocol=None
