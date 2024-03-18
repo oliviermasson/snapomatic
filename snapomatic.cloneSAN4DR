@@ -164,10 +164,10 @@ for vol in clonelist:
             userio.message("Unable to find snapshot for " + vol + " that matches requested recoverypoint")
             unable2clone.append(vol)
     else:
-#        print("Recovery point:" + str(recoverytarget))
+        print("Recovery point:" + str(recoverytarget))
         for x in range(0,len(snapshots.snapshots[vol]['ordered'])):
-#            print("Snapshot:" + str(snapshots.snapshots[vol]['ordered'][x]))
-#            print("Delta: " + str(snapshots.snapshots[vol]['ordered'][x][1] - recoverytarget))
+            print("Snapshot:" + str(snapshots.snapshots[vol]['ordered'][x]))
+            print("Delta: " + str(snapshots.snapshots[vol]['ordered'][x][1] - recoverytarget))
             if recoverBefore:
                 if snapshots.snapshots[vol]['ordered'][x][1] < recoverytarget \
                    and (len(snapshots.snapshots[vol]['ordered']) == x + 1 \
@@ -250,8 +250,6 @@ for volume in clonetargets.keys():
             userio.message(">> " + lun)
             luns2clone.append(lun)
             volumes2clone.append(lun.split('/')[2])
-
-sys.exit(0)
 
 volumes2clone=list(set(volumes2clone))
 
