@@ -160,6 +160,7 @@ class discoverPaths:
             pathinfo=discoverNFS(nfspaths,debug=self.debug,apicaller=localapi)
             if not pathinfo.go():
                 for path in nfspaths:
+                    del self.paths[path]
                     self.unknown.append(path)
             else:
                 self.nfsvolumes=pathinfo.nfs
