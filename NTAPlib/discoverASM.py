@@ -3,7 +3,6 @@ import doProcess
 import userio
 import re
 import getOracleHome
-from discoverLUN import discoverLUN
 
 class discoverASM:
 
@@ -16,6 +15,7 @@ class discoverASM:
         self.diskgroups={}
         self.asmdisks={}
         self.asmpaths={}
+        self.cache=None
         self.debug=False
 
         self.apibase=self.__class__.__name__
@@ -27,6 +27,9 @@ class discoverASM:
 
         if 'debug' in kwargs.keys():
             self.debug=kwargs['debug']
+
+        if 'cache' in kwargs.keys():
+            self.cache=kwargs['cache']
 
         if self.debug & 1:
             userio.message('',service=localapi + ":INIT")
@@ -62,29 +65,45 @@ class discoverASM:
         for item in dmdevices:
             if not item[:4] == '/dev/':
                 item='/dev/' + item
-            header=doProcess.doProcess(gridhome.home + '/bin/kfed read ' + item, \
-                             env={'ORACLE_HOME':gridhome.home}, \
-                             debug=self.debug)
-            if header.stdout is not None:
-                getgrp=False
-                getdskname=False
-                try:
-                    getgrp=[line for line in header.stdout if 'kfdhdb.grpname' in line][0]
-                except:
-                    pass
-                try:
-                    getdskname=[line for line in header.stdout if 'kfdhdb.dskname' in line][0]
-                except:
-                    pass
-                if getgrp and getdskname:
-                    diskgroup='+' + getgrp.split()[1]
-                    diskname=getdskname.split()[1]
-                    if not diskgroup in self.diskgroups.keys():
-                        self.diskgroups[diskgroup]={'disks':[diskname]}
-                    else:
-                        self.diskgroups[diskgroup]['disks'].append(diskname)
-                    self.asmdisks[diskname]={'name':diskname,'diskgroup':diskgroup,'device':item}
-                    self.asmpaths[item]={'name':diskname,'diskgroup':diskgroup,'device':item}
+            if self.cache and item in self.cache.asmpaths.keys():
+                if self.debug & 1:
+                    userio.message('Using cached LUN data for ' + item,service=localapi + ":CACHE")
+                self.asmpaths[item]=self.cache.asmpaths[item]
+                diskgroup=self.asmpaths[item]['diskgroup']
+                diskname=self.asmpaths[item]['name']
+                if not diskgroup in self.diskgroups.keys():
+                    self.diskgroups[diskgroup]={'disks':[diskname]}
+                else:
+                    self.diskgroups[diskgroup]['disks'].append(diskname)
+                self.asmdisks[diskname]={'name':diskname,'diskgroup':diskgroup,'device':item}
+            else:
+                header=doProcess.doProcess(gridhome.home + '/bin/kfed read ' + item, \
+                                 env={'ORACLE_HOME':gridhome.home}, \
+                                 debug=self.debug)
+                if header.stdout is not None:
+                    getgrp=False
+                    getdskname=False
+                    try:
+                        getgrp=[line for line in header.stdout if 'kfdhdb.grpname' in line][0]
+                    except:
+                        pass
+                    try:
+                        getdskname=[line for line in header.stdout if 'kfdhdb.dskname' in line][0]
+                    except:
+                        pass
+                    if getgrp and getdskname:
+                        diskgroup='+' + getgrp.split()[1]
+                        diskname=getdskname.split()[1]
+                        if not diskgroup in self.diskgroups.keys():
+                            self.diskgroups[diskgroup]={'disks':[diskname]}
+                        else:
+                            self.diskgroups[diskgroup]['disks'].append(diskname)
+                        self.asmdisks[diskname]={'name':diskname,'diskgroup':diskgroup,'device':item}
+                        self.asmpaths[item]={'name':diskname,'diskgroup':diskgroup,'device':item}
+                        if self.cache:
+                            self.cache.asmpaths[item]=self.asmpaths[item]
+                            if self.debug & 1:
+                                userio.message('Caching ASM path data for ' + item,service=localapi + ":CACHE")
 
         if self.debug & 1:
             self.showDebug()
