@@ -21,6 +21,7 @@ class discoverLUN:
         self.wwid=None
         self.mdalias=None
         self.multipath=False
+        self.cache=None
         self.debug=False
 
         self.apibase=self.__class__.__name__
@@ -40,10 +41,7 @@ class discoverLUN:
             userio.message('',service=localapi + ":INIT")
         
         if 'cache' in kwargs.keys():
-            store=kwargs['cache']
-            cache=True
-        else:
-            cache=False
+            self.cache=kwargs['cache']
 
         if not os.path.isfile('/usr/bin/sg_raw'):
             self.result=1
@@ -58,6 +56,23 @@ class discoverLUN:
         if 'apicaller' in kwargs.keys():
             self.apicaller=kwargs['apicaller']
         localapi='->'.join([self.apicaller,self.apibase + ".go"])
+
+        if self.cache and self.device in self.cache.luns.keys():
+            if self.debug & 1:
+                userio.message('Using cached LUN data for ' + self.device,service=localapi + ":CACHE")
+            self.igroup=self.cache.luns[self.device].igroup
+            self.svm=self.cache.luns[self.device].svm
+            self.path=self.cache.luns[self.device].path
+            self.type=self.cache.luns[self.device].type
+            self.volume=self.cache.luns[self.device].volume
+            self.size=self.cache.luns[self.device].size
+            self.blocksize=self.cache.luns[self.device].blocksize
+            self.protocol=self.cache.luns[self.device].protocol
+            self.wwid=self.cache.luns[self.device].wwid
+            self.mdalias=self.cache.luns[self.device].mdalias
+
+            self.result=0
+            return(True)
 
         if not os.path.isfile('/usr/bin/sg_raw'):
             self.result=1
@@ -163,8 +178,11 @@ class discoverLUN:
             self.reason="LUN is not a NetApp LUN"
             return(False)
 
-
         self.result=0
+        if self.cache:
+            if self.debug & 1:
+                userio.message("Caching LUN data for device " + self.device,service=localapi + ":CACHE")
+            self.cache.luns[self.device]=self
         if self.debug & 1:
             self.showDebug()
         return(True)

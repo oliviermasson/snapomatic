@@ -164,21 +164,25 @@ for vol in clonelist:
             userio.message("Unable to find snapshot for " + vol + " that matches requested recoverypoint")
             unable2clone.append(vol)
     else:
-        print("Recovery point:" + str(recoverytarget))
+        #print("Recovery point:" + str(recoverytarget))
         for x in range(0,len(snapshots.snapshots[vol]['ordered'])):
-            print("Snapshot:" + str(snapshots.snapshots[vol]['ordered'][x]))
-            print("Delta: " + str(snapshots.snapshots[vol]['ordered'][x][1] - recoverytarget))
+            #print()
+            #print("Snapshot:" + str(snapshots.snapshots[vol]['ordered'][x]))
+            #print("Delta: " + str(snapshots.snapshots[vol]['ordered'][x][1] - recoverytarget))
+            #print("x=" + str(x))
             if recoverBefore:
-                if snapshots.snapshots[vol]['ordered'][x][1] < recoverytarget \
-                   and (len(snapshots.snapshots[vol]['ordered']) == x + 1 \
-                   or snapshots.snapshots[vol]['ordered'][x+1][1] > recoverytarget):
+                if snapshots.snapshots[vol]['ordered'][x][1] < recoverytarget:
+                    print("1:Snapshot " + snapshots.snapshots[vol]['ordered'][x][0] + " is older than recoverypoint")
+                if len(snapshots.snapshots[vol]['ordered']) >= x + 1:
+                    print("2:Dictionary has another element, length is " + str(len(snapshots.snapshots[vol]['ordered'])))
+                if snapshots.snapshots[vol]['ordered'][x][1] < recoverytarget:
                         timestamp=snapshots.snapshots[vol]['snapshots'][snapshots.snapshots[vol]['ordered'][x][0]]['epoch']
                         snapshot2clone=snapshots.snapshots[vol]['ordered'][x][0]
                         break
             else:
                 if snapshots.snapshots[vol]['ordered'][x][1] > recoverytarget \
                    and (len(snapshots.snapshots[vol]['ordered']) == x + 1 \
-                   or snapshots.snapshots[vol]['ordered'][x-1][1] < recoverytarget):
+                        or snapshots.snapshots[vol]['ordered'][x+1][1] < recoverytarget):
                         timestamp=snapshots.snapshots[vol]['snapshots'][snapshots.snapshots[vol]['ordered'][x][0]]['epoch']
                         snapshot2clone=snapshots.snapshots[vol]['ordered'][x][0]
                         break

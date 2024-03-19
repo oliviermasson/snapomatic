@@ -14,6 +14,9 @@ import discoverOracle
 import discoverPaths
 import discoverASM
 import userio
+import smCache
+
+mycache=smCache.smCache()
 
 snapomaticversion='DEV'
 
@@ -281,10 +284,9 @@ if myopts.mode == 'protect':
             undiscoveredSID.append(sid)
 
     datafilevol4snapshot={}
-    logvol4snapshot={}
     for sid in discoveredSID.keys():
         newdatafilefs=list(discoveredSID[sid].datafiles.keys())
-        mypaths=discoverPaths.discoverPaths(newdatafilefs,debug=debug)
+        mypaths=discoverPaths.discoverPaths(newdatafilefs,cache=mycache,debug=debug)
         mypaths.go()
         if len(mypaths.unknown):
             userio.warn("Unable to resolve paths for " + sid + ":" + ','.join(mypaths.unknown))
@@ -292,12 +294,14 @@ if myopts.mode == 'protect':
         else:
             for device in mypaths.allvolumes.keys():
                 datafilevol4snapshot[device]=mypaths.allvolumes[device]
+
     for sid in undiscoveredSID:
         del discoveredSID[sid]
 
+    logvol4snapshot={}
     for sid in discoveredSID.keys():
         newlogfs=list(discoveredSID[sid].arch.keys()) + list(discoveredSID[sid].redo.keys()) + list(discoveredSID[sid].ctrl.keys())
-        mypaths=discoverPaths.discoverPaths(newlogfs,debug=debug)
+        mypaths=discoverPaths.discoverPaths(newlogfs,cache=mycache,debug=debug)
         mypaths.go()
         if len(mypaths.unknown):
             userio.warn("Unable to resolve paths for " + sid + ":".join(mypaths.unknown))
@@ -306,7 +310,14 @@ if myopts.mode == 'protect':
         else:
             for device in mypaths.allvolumes.keys():
                 logvol4snapshot[device]=mypaths.allvolumes[device]
+
     undiscoveredSID=set(undiscoveredSID)
+
+    commonsvms=set(datafilevol4snapshot.keys()).intersection(set(logvol4snapshot.keys()))
+    for svm in commonsvms:
+        commonvolumes=set(datafilevol4snapshot[svm]).intersection(set(logvol4snapshot[svm]))
+        if len(commonvolumes) > 0:
+            userio.fail("Datafiles/log file volume collision detected, exiting...")
     
     backupmode=[]
     if myopts.nobackupmode:
@@ -332,19 +343,10 @@ if myopts.mode == 'protect':
             if len(datafilevol4snapshot[svm]) > 1:
                 cgrequired=True
                 break
-
     if cgrequired:
         userio.message("Multiple datafile volumes detected, CG required")
     else:
-        userio.message("Single volume for datafiles detected, no CG required")
-                
-    if not myopts.nobackupmode:
-        for sid in discoveredSID.keys():
-            change=setOracleBackup.setOracleBackup(sid,debug=debug)
-            if change.go(False):
-                userio.message(sid + " removed from backup mode ")
-            else:
-                userio.warn(change.reason)
+        userio.message("Single volume for datafiles detected, CG not required")
     
     cgrequired=False
     if len(logvol4snapshot.keys()) > 1:
@@ -357,11 +359,16 @@ if myopts.mode == 'protect':
     if cgrequired:
         userio.message("Multiple log volumes detected, CG required")
     else:
-        userio.message("Single volume for log detected, no CG required")
-
-    print(test.devices)
+        userio.message("Single volume for log detected, CG not required")
+                
     print(datafilevol4snapshot)
+
+    if not myopts.nobackupmode:
+        for sid in discoveredSID.keys():
+            change=setOracleBackup.setOracleBackup(sid,debug=debug)
+            if change.go(False):
+                userio.message(sid + " removed from backup mode ")
+            else:
+                userio.warn(change.reason)
+    
     print(logvol4snapshot)
-
-
-        

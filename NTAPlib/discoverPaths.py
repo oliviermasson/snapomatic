@@ -27,6 +27,7 @@ class discoverPaths:
         self.asmvolumes={}
         self.unknown=[]
         self.multipath=False
+        self.cache=None
         self.debug=False
 
         self.apibase=self.__class__.__name__
@@ -44,6 +45,9 @@ class discoverPaths:
 
         if 'multipath' in kwargs.keys():
             self.multipath=kwargs['multipath']
+
+        if 'cache' in kwargs.keys():
+            self.cache=kwargs['cache']
         
     def showDebug(self):
         userio.debug(self)
@@ -68,15 +72,14 @@ class discoverPaths:
         for path in self.discoverypaths:
             if path[0] == '+':
                 if not asmdiscovery:
-                    asminfo=discoverASM(debug=self.debug)
+                    asminfo=discoverASM(cache=self.cache,debug=self.debug)
                     asminfo.go()
                     asmdiscovery=True
                 diskgrouponly=path.split('/')[0]
                 if diskgrouponly in asminfo.diskgroups.keys():
                     self.paths[path]={'device':diskgrouponly,'fstype':'asm','mountpoint':None}
                     if self.debug & 1:
-                        userio.message('Path ' + path + ' resolves to +' + diskgrouponly,service=localapi + ":OP")
-                        self.unknown.append(path)
+                        userio.message('Path ' + path + ' resolves to ' + diskgrouponly,service=localapi + ":OP")
                 else:
                     self.unknown.append(path)
             elif not os.path.exists(path):
@@ -113,7 +116,7 @@ class discoverPaths:
             device=self.paths[item]['device']
             if self.paths[item]['fstype'] == 'block':
                 if device not in self.luns.keys():
-                    nextlun=discoverLUN(device,multipath=self.multipath,debug=self.debug,apicaller=localapi)
+                    nextlun=discoverLUN(device,multipath=self.multipath,cache=self.cache,debug=self.debug,apicaller=localapi)
                     if not nextlun.go():
                         del self.paths[item]
                         self.unknown.append(item)
@@ -145,12 +148,13 @@ class discoverPaths:
                 nfspaths.append(item)
             elif self.paths[item]['fstype'] == 'asm':
                 for asmdisk in asminfo.diskgroups[device]['disks']:
-                    nextlun=discoverLUN(asminfo.asmdisks[asmdisk]['device'],debug=self.debug,apicaller=localapi)
-                    if not nextlun.go():
-                        del self.paths[item]
-                        self.unknown.append(item)
-                    else:
-                        self.luns[asminfo.asmdisks[asmdisk]['device']] = nextlun
+                    if asminfo.asmdisks[asmdisk]['device'] not in self.luns.keys():
+                        nextlun=discoverLUN(asminfo.asmdisks[asmdisk]['device'],cache=self.cache,debug=self.debug,apicaller=localapi)
+                        if not nextlun.go():
+                            del self.paths[item]
+                            self.unknown.append(item)
+                        else:
+                            self.luns[asminfo.asmdisks[asmdisk]['device']] = nextlun
             else:
                 del self.paths[item]
                 self.unknown.append(item)
