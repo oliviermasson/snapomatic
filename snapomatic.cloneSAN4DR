@@ -172,9 +172,9 @@ for vol in clonelist:
             #print("x=" + str(x))
             if recoverBefore:
                 if snapshots.snapshots[vol]['ordered'][x][1] < recoverytarget:
-                    print("1:Snapshot " + snapshots.snapshots[vol]['ordered'][x][0] + " is older than recoverypoint")
+                    #print("1:Snapshot " + snapshots.snapshots[vol]['ordered'][x][0] + " is older than recoverypoint")
                 if len(snapshots.snapshots[vol]['ordered']) >= x + 1:
-                    print("2:Dictionary has another element, length is " + str(len(snapshots.snapshots[vol]['ordered'])))
+                    #print("2:Dictionary has another element, length is " + str(len(snapshots.snapshots[vol]['ordered'])))
                 if snapshots.snapshots[vol]['ordered'][x][1] < recoverytarget:
                         timestamp=snapshots.snapshots[vol]['snapshots'][snapshots.snapshots[vol]['ordered'][x][0]]['epoch']
                         snapshot2clone=snapshots.snapshots[vol]['ordered'][x][0]

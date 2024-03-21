@@ -434,13 +434,13 @@ for dbuname,oraclehome,oraclebase,oracleuser in mounted:
     print(">> Recovering database " + dbuname)
     if rmanrecoverypoint:
         if myopts.snapshot_optimized:
-            out=doSqlplus(dbuname + '_1',"recover database until time '" + rmanrecoverypoint + "' snapshot time '" + snapshottime + "';",
+            out=doSqlplus(dbuname + '_1',"recover automatic database until time '" + rmanrecoverypoint + "' snapshot time '" + snapshottime + "';",
                           user=oracleuser,
                           home=oraclehome,
                           base=oraclebase,
                           debug=debug)
         else:
-            out=doSqlplus(dbuname + '_1',"recover database until time '" + rmanrecoverypoint + "';",
+            out=doSqlplus(dbuname + '_1',"recover automatic database until time '" + rmanrecoverypoint + "';",
                           user=oracleuser,
                           home=oraclehome,
                           base=oraclebase,
