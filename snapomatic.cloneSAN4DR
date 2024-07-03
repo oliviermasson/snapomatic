@@ -29,6 +29,7 @@ validoptions={'target':'multistr',
               'restdebug':'bool',
               'recoverypoint':'timestamp',
               'after':'bool',
+              'nocgs':'bool',
               'before':'bool'}
 
 requiredoptions=['target','igrouptoken']
@@ -54,6 +55,8 @@ usage="Version " + snapomaticversion + "\n" + \
       "          (optionally specifies the igroup name, %=token\n\n" + \
       "          [--split]\n" + \
       "          (split the cloned volumes)\n\n" + \
+      "          [--nocgs]\n" + \
+      "          (Skip CG snapshot discovery)\n\n" + \
       "          [--debug]\n" + \
       "          (show debug output)\n\n" + \
       "          [--restdebug]\n" + \
@@ -128,9 +131,9 @@ userio.message()
 userio.linefeed()
 userio.message("Retrieving snapshots...")
 if prefix:
-    snapshots=getSnapshots(svm,volumes=clonelist,name=prefix + "*", debug=debug)
+    snapshots=getSnapshots(svm,volumes=clonelist,name=prefix + "*",nocgs=myopts.nocgs, debug=debug)
 else:
-    snapshots=getSnapshots(svm,volumes=clonelist,debug=debug)
+    snapshots=getSnapshots(svm,volumes=clonelist,nocgs=myopts.nocgs,debug=debug)
 if not snapshots.go():
     snapshots.showDebug()
 
