@@ -9,6 +9,7 @@ sys.path.append(sys.path[0] + "/NTAPlib")
 import userio
 from getSnapmirror import getSnapmirror
 from getSnapshots import getSnapshots
+from getVolumes import getVolumes
 from getLUNs import getLUNs
 from cloneVolumes import cloneVolumes
 from mapLUNs import mapLUNs
@@ -30,6 +31,7 @@ validoptions={'target':'multistr',
               'recoverypoint':'timestamp',
               'after':'bool',
               'nocgs':'bool',
+              'local':'bool',
               'before':'bool'}
 
 requiredoptions=['target','igrouptoken']
@@ -57,6 +59,8 @@ usage="Version " + snapomaticversion + "\n" + \
       "          (split the cloned volumes)\n\n" + \
       "          [--nocgs]\n" + \
       "          (Skip CG snapshot discovery)\n\n" + \
+      "          [--local]\n" + \
+      "          (work with sources volumes, not snapmirror destination volumes)\n\n" + \
       "          [--debug]\n" + \
       "          (show debug output)\n\n" + \
       "          [--restdebug]\n" + \
@@ -109,24 +113,34 @@ igroupname=myopts.igroupname
 
 nosleep=myopts.nosleep
 
-userio.linefeed()
-userio.message("Retrieving snapmirrored volumes...")
-snapmirror=getSnapmirror(svm,volumes=voltargets.keys(),debug=debug)
-if not snapmirror.go():
-    snapmirror.showDebug()
-if len(snapmirror.snapmirrorDestinations.keys()) < 1:
-    userio.fail("No matching snapmirrored volumes detected")
-
 clonelist=[]
 
-if len(snapmirror.snapmirrorDestinations[svm]['volumes'].keys()) > 0:
-    userio.message("Found matching snapmirrored volumes")
+userio.linefeed()
+if not myopts.local:
+    userio.message("Retrieving snapmirrored volumes...")
+    snapmirror=getSnapmirror(svm,volumes=voltargets.keys(),debug=debug)
+    if not snapmirror.go():
+        snapmirror.showDebug()
+    if len(snapmirror.snapmirrorDestinations.keys()) < 1:
+        userio.fail("No matching snapmirrored volumes detected")
+
+    if len(snapmirror.snapmirrorDestinations[svm]['volumes'].keys()) > 0:
+        userio.message("Found matching snapmirrored volumes")
+    else:
+        userio.fail("No matching snapmirrored volumes detected")
+    for volume in snapmirror.snapmirrorDestinations[svm]['volumes'].keys():
+        userio.message(">> " + volume)
+        clonelist.append(volume)
+    userio.message()
 else:
-    userio.fail("No matching snapmirrored volumes detected")
-for volume in snapmirror.snapmirrorDestinations[svm]['volumes'].keys():
-    userio.message(">> " + volume)
-    clonelist.append(volume)
-userio.message()
+    volumes=getVolumes(svm,volumes=voltargets.keys(),debug=debug)
+    if not volumes.go():
+        userio.message(volumes.reason)
+        sys.exit(1)
+    for volume in volumes.volumesmatch.keys():
+        userio.message(">> " + volume)
+        clonelist.append(volume)
+    userio.message()
 
 userio.linefeed()
 userio.message("Retrieving snapshots...")
@@ -235,18 +249,34 @@ userio.message("Retrieving LUNs from current volumes...")
 for volume in clonetargets.keys():
     lunlist=[]
 
-    for volpattern in voltargets.keys():
-        if volpattern == '*':
-            volpatternmatch=re.compile('^.*.$')
-        elif re.findall(r'[?*.^$]',volpattern):
-            volpatternmatch=re.compile(volpattern)
-        else:
-            volpatternmatch=re.compile('^' + volpattern + '$')
+    # for volpattern in voltargets.keys():
+    #     if volpattern == '*':
+    #         volpatternmatch=re.compile('^.*.$')
+    #     elif re.findall(r'[?*.^$]',volpattern):
+    #         volpatternmatch=re.compile(volpattern)
+    #     else:
+    #         volpatternmatch=re.compile('^' + volpattern + '$')
 
-        if re.match(volpatternmatch,volume):
+    #     if re.match(volpatternmatch,volume):
+    #         for lun in voltargets[volpattern]:
+    #             lunlist.append("/vol/" + volume + "/" + lun)
+
+    for volpattern in voltargets.keys():
+        protected_groups = {}
+        def protect_group(match):
+            placeholder = f"\0{len(protected_groups)}\0"
+            protected_groups[placeholder] = match.group(0)
+            return placeholder
+
+        pattern = re.sub(r'\([^)]*\)', protect_group, volpattern)
+        pattern = pattern.replace('*', '.*')
+        for placeholder, original in protected_groups.items():
+            pattern = pattern.replace(placeholder, original)
+        regex = re.compile(pattern)
+        if re.search(regex,volume):
             for lun in voltargets[volpattern]:
                 lunlist.append("/vol/" + volume + "/" + lun)
-
+                
     matchingluns=getLUNs(svm,lun=lunlist,debug=debug)
     if not matchingluns.go():
         userio.message("Unable to retrieve LUN list")

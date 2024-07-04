@@ -76,18 +76,32 @@ class getSnapmirror:
                         if pattern == '*':
                             volumematch=True
                             break
-                        elif re.findall(r'[?*.^$]',pattern):
-                            try:
-                                volpatternmatch=re.compile(pattern)
-                            except:
-                                self.result=1
-                                self.reason="Illegal volume name match"
-                                return(False)
-                        else:
-                            volpatternmatch=re.compile('^' + pattern + '$')
+                        protected_groups = {}
+                        def protect_group(match):
+                            placeholder = f"\0{len(protected_groups)}\0"
+                            protected_groups[placeholder] = match.group(0)
+                            return placeholder
 
-                        if re.findall(volpatternmatch,srcvol) or re.findall(volpatternmatch,dstvol):
-                            volumematch=True
+                        pattern = re.sub(r'\([^)]*\)', protect_group, pattern)
+                        pattern = pattern.replace('*', '.*')
+                        for placeholder, original in protected_groups.items():
+                            pattern = pattern.replace(placeholder, original)
+                        regex = re.compile(pattern)
+                        # elif re.findall(r'[?*.^$]',pattern):
+                        #     try:
+                        #         volpatternmatch=re.compile(pattern)
+                        #     except:
+                        #         self.result=1
+                        #         self.reason="Illegal volume name match"
+                        #         return(False)
+                        # else:
+                        #     volpatternmatch=re.compile('^' + pattern + '$')
+
+                        # if re.findall(volpatternmatch,srcvol) or re.findall(volpatternmatch,dstvol):
+                        #     volumematch=True
+                        #     break
+                        if re.findall(regex,srcvol) or re.findall(regex,dstvol):
+                            volumematch = True
                             break
                 else:
                     volumematch=True

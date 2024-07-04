@@ -1,6 +1,7 @@
 import doREST
 import sys
 import userio
+import re
 
 class getVolumes:
 
@@ -13,6 +14,7 @@ class getVolumes:
         self.volumes={}
         self.volmatch='*'
         self.debug=False
+        self.volumesmatch={}
         
         self.api='/storage/volumes'
         self.restargs='fields=uuid,' + \
@@ -38,6 +40,8 @@ class getVolumes:
             elif type(kwargs['volumes']) is list:
                 self.restargs=self.restargs + "&name=" + '|'.join(kwargs['volumes'])
                 self.volmatch=','.join(kwargs['volumes'])
+            else:
+                self.volumes=kwargs['volumes']
 
         self.restargs=self.restargs + "&svm.name=" + svm
 
@@ -82,18 +86,43 @@ class getVolumes:
                     aggrs.append(item['name'])
                 aggrs.sort()
                 aggrlist=','.join(aggrs)
+
+                volumematch=False
+                if len(self.volumes) > 0:
+                    for pattern in self.volumes:
+                        if pattern == '*':
+                            volumematch=True
+                            break
+                        protected_groups = {}
+                        def protect_group(match):
+                            placeholder = f"\0{len(protected_groups)}\0"
+                            protected_groups[placeholder] = match.group(0)
+                            return placeholder
+
+                        pattern = re.sub(r'\([^)]*\)', protect_group, pattern)
+                        pattern = pattern.replace('*', '.*')
+                        for placeholder, original in protected_groups.items():
+                            pattern = pattern.replace(placeholder, original)
+                        regex = re.compile(pattern)
+                        if re.findall(regex,name):
+                            volumematch = True
+                            break
+                else:
+                    volumematch=True
+
                 if self.debug & 1:
                     userio.message("Found volume " + name,service=localapi + ":OP")
-                self.volumes[name]={'uuid':uuid,
-                                       'size':record['size'],
-                                       'aggrs':aggrlist,
-                                       'svm':{'name':svmname,'uuid':svmuuid},
-                                       'type':record['type']}
+                if volumematch:
+                    self.volumesmatch[name]={'uuid':uuid,
+                                        'size':record['size'],
+                                        'aggrs':aggrlist,
+                                        'svm':{'name':svmname,'uuid':svmuuid},
+                                        'type':record['type']}
 
-                try:
-                    self.volumes[name]['junction-path']=record['nas']['path']
-                except:
-                    self.volumes[name]['junction-path']=None
+                    try:
+                        self.volumesmatch[name]['junction-path']=record['nas']['path']
+                    except:
+                        self.volumesmatch[name]['junction-path']=None
         else:
             self.result=1
             self.reason=rest.reason
