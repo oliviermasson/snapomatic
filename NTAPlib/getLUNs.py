@@ -85,6 +85,7 @@ class getLUNs:
                 svmuuid=record['svm']['uuid']
                 lunpath=record['name']
                 lunuuid=record['uuid']
+                lunserial=record['serial_number']
                 volname=record['location']['volume']['name']
                 voluuid=record['location']['volume']['uuid']
 
@@ -93,7 +94,8 @@ class getLUNs:
                                     'svm':{'name':svmname,'uuid':svmuuid},
                                     'state':record['status']['state'],
                                     'igroup':[],
-                                    'volume':{'uuid':voluuid,'name':volname}}
+                                    'volume':{'uuid':voluuid,'name':volname},
+                                    'serialnumber':lunserial}
 
                 if self.debug & 4:
                     userio.message("Found LUN " + str(self.luns[lunpath]) ,service=localapi + ":DATA")

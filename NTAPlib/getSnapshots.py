@@ -122,7 +122,7 @@ class getSnapshots:
                 self.showDebug()
             return(False)
         else:
-            self.volumes=list(matchingvolumes.volumes.keys())
+            self.volumes=list(matchingvolumes.volumesmatch.keys())
 
         if len(self.volumes) == 0:
             self.result=1
@@ -172,7 +172,7 @@ class getSnapshots:
 
         for volmatch in self.volumes:
             if volmatch not in self.snapshots.keys():
-                self.snapshots[volmatch]={'snapshots':{},'recent':{},'uuid':matchingvolumes.volumes[volmatch]['uuid']}
+                self.snapshots[volmatch]={'snapshots':{},'recent':{},'uuid':matchingvolumes.volumesmatch[volmatch]['uuid']}
             if self.debug & 1:
                 userio.message("Retrieving snapshots for " + self.svm + ":" + volmatch,service=localapi + ":OP")
             rest=doREST.doREST(self.svm,'get',self.volapi,restargs=self.volrestargs + '&volume.name=' + volmatch,debug=self.debug)

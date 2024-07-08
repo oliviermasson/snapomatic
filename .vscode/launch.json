@@ -1,0 +1,23 @@
+{
+    "configurations": [
+        {
+            "name": "Python Debugger: Current File with Arguments",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": ["--target", "svm_masson", "ora_PROD_DEV*|ora_PROD_UAT*", "--local", "--nocgs", "--debug", "--igrouptoken", "1","--igroupname", "PROD"]
+            //"args": ["--target", "svm_masson", "ora_PROD_UAT_*", "--local", "--nocgs", "--debug", "--igrouptoken", "2"]
+            //"args": ["--target", "svm_masson", "failover_ora_PROD_UAT_log", "--debug"]
+            //"args": ["--target", "jfs_dev2", "failover_ora_DRcluster*", "--debug"]
+            //"args": ["show", "--target", "svm_masson", "ora_PROD_DEV*|ora_PROD_UAT*", "--debug"]
+        },
+        {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        }
+    ]
+}

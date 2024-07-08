@@ -177,7 +177,7 @@ class getCGs:
                         self.showDebug()
                     return(False)
                 else:
-                    self.volumes=volumes.volumes
+                    self.volumes=volumes.volumesmatch
 
             self.result=0
             return(True)

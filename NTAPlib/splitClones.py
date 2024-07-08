@@ -68,11 +68,11 @@ class splitClones:
             self.stderr=matchingvolumes.stderr
             return(False)
 
-        availvols=list(matchingvolumes.volumes.keys())
+        availvols=list(matchingvolumes.volumesmatch.keys())
         splitlist=[]
         for item in self.volumes:
             if item in availvols:
-                splitlist.append((item,matchingvolumes.volumes[item]['uuid']))
+                splitlist.append((item,matchingvolumes.volumesmatch[item]['uuid']))
             else:
                 self.result=1
                 self.failed.append(item)

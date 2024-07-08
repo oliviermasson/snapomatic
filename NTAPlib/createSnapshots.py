@@ -75,7 +75,7 @@ class createSnapshots:
                 self.showDebug()
             return(False)
         else:
-            self.volumes=list(matchingvolumes.volumes.keys())
+            self.volumes=list(matchingvolumes.volumesmatch.keys())
 
         if len(self.volumes) == 0:
             self.result=1

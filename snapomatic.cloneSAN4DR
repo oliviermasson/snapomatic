@@ -16,6 +16,7 @@ from mapLUNs import mapLUNs
 import time
 import getopt
 import re
+import binascii
 
 snapomaticversion='DEV'
 
@@ -117,6 +118,7 @@ clonelist=[]
 
 userio.linefeed()
 if not myopts.local:
+    cloneprefix = "failover_"
     userio.message("Retrieving snapmirrored volumes...")
     snapmirror=getSnapmirror(svm,volumes=voltargets.keys(),debug=debug)
     if not snapmirror.go():
@@ -133,6 +135,7 @@ if not myopts.local:
         clonelist.append(volume)
     userio.message()
 else:
+    cloneprefix = "clone_"
     volumes=getVolumes(svm,volumes=voltargets.keys(),debug=debug)
     if not volumes.go():
         userio.message(volumes.reason)
@@ -295,12 +298,12 @@ userio.message("Cloning volumes...")
 clonecompleted=[]
 clonefailed=[]
 for vol in volumes2clone:
-    clone=cloneVolumes(svm,(vol,"failover_"+ vol,clonetargets[vol]['uuid']),uuid=True,split=splitclones,debug=debug)
+    clone=cloneVolumes(svm,(vol,cloneprefix + vol,clonetargets[vol]['uuid']),uuid=True,split=splitclones,debug=debug)
     if not clone.go():
         clone.showDebug()
         clonefailed.append(vol)
     else:
-        clonecompleted.append(vol + "failover_")
+        clonecompleted.append(cloneprefix + vol)
 userio.message()
 
 if not nosleep:
@@ -310,14 +313,22 @@ if not nosleep:
 
 for lun in luns2clone:
     lunpath=lun.split('/')
-    lunpath[2]='failover_' + lunpath[2]
+    lunpath[2]=cloneprefix + lunpath[2]
     lun=('/').join(lunpath)
     igroupbase=lun.split('_')[igrouptoken]
     if igroupname:
         igroup=igroupname.replace('%',igroupbase)
     else:
         igroup=igroupbase
-    userio.message("Mapping " + lun + " to igroup " + igroup)
+    matchingluns=getLUNs(svm,lun=lun,debug=debug)
+    if not matchingluns.go():
+        userio.message("Unable to retrieve LUN")
+        matchingluns.showDebug()
+        sys.exit(1)
+    else:
+        lunserialnumberascii=matchingluns.luns[lun]["serialnumber"]
+        lunserialnumberhex=str(binascii.hexlify(lunserialnumberascii.encode())).replace("b'",'').replace("'",'')
+    userio.message("Mapping " + lun + " with serial " + lunserialnumberhex + " to igroup " + igroup)
     mapping=mapLUNs(svm,lun,igroup,debug=debug)
     if not mapping.go():
         mapping.showDebug()

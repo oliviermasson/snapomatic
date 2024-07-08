@@ -126,8 +126,8 @@ if myopts.mode == 'show':
                     grid.append([cg,
                                  parentfield,
                                  volume,
-                                 str(volumes.volumes[volume]['size']/1048576),
-                                 volumes.volumes[volume]['aggrs'],
+                                 str(volumes.volumesmatch[volume]['size']/1048576),
+                                 volumes.volumesmatch[volume]['aggrs'],
                                  ])
         else:
             grid=[['Volume','Size (GB)','Aggregate']]

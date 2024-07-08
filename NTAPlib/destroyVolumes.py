@@ -46,14 +46,14 @@ class destroyVolumes:
         allvols=getVolumes.getVolumes(self.svm,volumes=self.volume,apicaller=localapi,debug=self.debug)
         allvols.go()
 
-        if self.volume not in allvols.volumes.keys():
+        if self.volume not in allvols.volumesmatch.keys():
             self.result=1
             self.reason="Volume " + self.volume + " does not exist on SVM " + self.svm
             if self.debug & 1:
                 self.showDebug()
             return(False)
         else:
-            uuid=allvols.volumes[self.volume]['uuid']
+            uuid=allvols.volumesmatch[self.volume]['uuid']
 
         if self.debug & 1:
             userio.message("Destroying volume " + self.svm + ":" + self.volume,service=localapi + ":OP")
