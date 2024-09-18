@@ -53,7 +53,7 @@ class discoverASM:
             self.stdout=gridhome.stdout
             self.stderr=gridhome.stderr
             if debug & 1:
-                showDebug()
+                self.showDebug()
 
         if len(self.paths) == 0:
             multipaths=os.listdir('/dev/')

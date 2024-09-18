@@ -38,7 +38,7 @@ class getOracleBase:
                 self.result=1
                 self.reason="Unable to find Oracle user for " + self.home
                 if self.debug & 1:
-                    showDebug()
+                    self.showDebug()
                 return
             else:
                 self.user=out.user
@@ -56,7 +56,7 @@ class getOracleBase:
 
         if self.user is None:
             if self.debug & 1:
-                showDebug()
+                self.showDebug()
             return(False)
 
         if self.debug & 1:
@@ -73,11 +73,11 @@ class getOracleBase:
                 self.result=1
                 self.reason="Unable to find ORACLE_BASE for " + self.home
                 if self.debug & 1:
-                    showDebug()
+                    self.showDebug()
                 return(False)
         else:
             self.result=1
             self.reason="Unable to run " + self.home + "/bin/orabase"
             if self.debug & 1:
-                showDebug()
+                self.showDebug()
 

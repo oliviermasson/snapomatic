@@ -231,16 +231,32 @@ volumes2clone=[]
 userio.message("Retrieving LUNs from current volumes...")
 for volume in clonetargets.keys():
     lunlist=[]
+    
+    # for volpattern in voltargets.keys():
+    #     if volpattern == '*':
+    #         volpatternmatch=re.compile('^.*.$')
+    #     elif re.findall(r'[?*.^$]',volpattern):
+    #         volpatternmatch=re.compile(volpattern)
+    #     else:
+    #         volpatternmatch=re.compile('^' + volpattern + '$')
+
+    #     if re.match(volpatternmatch,volume):
+    #         for lun in voltargets[volpattern]:
+    #             lunlist.append("/vol/" + volume + "/" + lun)
 
     for volpattern in voltargets.keys():
-        if volpattern == '*':
-            volpatternmatch=re.compile('^.*.$')
-        elif re.findall(r'[?*.^$]',volpattern):
-            volpatternmatch=re.compile(volpattern)
-        else:
-            volpatternmatch=re.compile('^' + volpattern + '$')
+        protected_groups = {}
+        def protect_group(match):
+            placeholder = f"\0{len(protected_groups)}\0"
+            protected_groups[placeholder] = match.group(0)
+            return placeholder
 
-        if re.match(volpatternmatch,volume):
+        pattern = re.sub(r'\([^)]*\)', protect_group, volpattern)
+        pattern = pattern.replace('*', '.*')
+        for placeholder, original in protected_groups.items():
+            pattern = pattern.replace(placeholder, original)
+        regex = re.compile(pattern)
+        if re.search(regex,volume):
             for lun in voltargets[volpattern]:
                 lunlist.append("/vol/" + volume + "/" + lun)
 
@@ -256,6 +272,8 @@ for volume in clonetargets.keys():
             volumes2clone.append(lun.split('/')[2])
 
 volumes2clone=list(set(volumes2clone))
+
+sys.exit(1)
 
 userio.linefeed()
 userio.message("Cloning volumes...")
