@@ -29,6 +29,7 @@ validoptions={'target':'multistr',
               'restdebug':'bool',
               'recoverypoint':'timestamp',
               'after':'bool',
+              'nocgs':'bool',
               'before':'bool'}
 
 requiredoptions=['target','igrouptoken']
@@ -54,6 +55,8 @@ usage="Version " + snapomaticversion + "\n" + \
       "          (optionally specifies the igroup name, %=token\n\n" + \
       "          [--split]\n" + \
       "          (split the cloned volumes)\n\n" + \
+      "          [--nocgs]\n" + \
+      "          (Skip CG snapshot discovery)\n\n" + \
       "          [--debug]\n" + \
       "          (show debug output)\n\n" + \
       "          [--restdebug]\n" + \
@@ -128,9 +131,9 @@ userio.message()
 userio.linefeed()
 userio.message("Retrieving snapshots...")
 if prefix:
-    snapshots=getSnapshots(svm,volumes=clonelist,name=prefix + "*", debug=debug)
+    snapshots=getSnapshots(svm,volumes=clonelist,name=prefix + "*",nocgs=myopts.nocgs, debug=debug)
 else:
-    snapshots=getSnapshots(svm,volumes=clonelist,debug=debug)
+    snapshots=getSnapshots(svm,volumes=clonelist,nocgs=myopts.nocgs,debug=debug)
 if not snapshots.go():
     snapshots.showDebug()
 
@@ -171,10 +174,10 @@ for vol in clonelist:
             #print("Delta: " + str(snapshots.snapshots[vol]['ordered'][x][1] - recoverytarget))
             #print("x=" + str(x))
             if recoverBefore:
-                if snapshots.snapshots[vol]['ordered'][x][1] < recoverytarget:
-                    print("1:Snapshot " + snapshots.snapshots[vol]['ordered'][x][0] + " is older than recoverypoint")
-                if len(snapshots.snapshots[vol]['ordered']) >= x + 1:
-                    print("2:Dictionary has another element, length is " + str(len(snapshots.snapshots[vol]['ordered'])))
+                #if snapshots.snapshots[vol]['ordered'][x][1] < recoverytarget:
+                    #print("1:Snapshot " + snapshots.snapshots[vol]['ordered'][x][0] + " is older than recoverypoint")
+                #if len(snapshots.snapshots[vol]['ordered']) >= x + 1:
+                    #print("2:Dictionary has another element, length is " + str(len(snapshots.snapshots[vol]['ordered'])))
                 if snapshots.snapshots[vol]['ordered'][x][1] < recoverytarget:
                         timestamp=snapshots.snapshots[vol]['snapshots'][snapshots.snapshots[vol]['ordered'][x][0]]['epoch']
                         snapshot2clone=snapshots.snapshots[vol]['ordered'][x][0]

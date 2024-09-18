@@ -74,6 +74,9 @@ class getSnapshots:
         if 'debug' in kwargs.keys():
             self.debug=kwargs['debug']
 
+        if 'nocgs' in kwargs.keys():
+            self.nocgs=kwargs['nocgs']
+
         if self.debug & 1:
             userio.message('',service=localapi + ":INIT")
 
@@ -126,41 +129,46 @@ class getSnapshots:
             self.reason="No matching volumes"
             return(False)
 
-        if self.debug & 1:
-            userio.message("Retriving CG data on " + self.svm,service=localapi + ":OP")
-        cgs=getCGs(self.svm,volumes=self.volumes,apicaller=localapi,debug=self.debug)
-
-        if cgs.go():
-            self.cgs=cgs.cgs
+        if self.nocgs:
             cgsnaps=[]
-            for cgname in self.cgs.keys():
-                nextapi=self.cgapi.replace('{UUID}',self.cgs[cgname]['uuid'])
-                if self.debug & 1:
-                    userio.message("Retriving CG snapshots for CG " + cgname,service=localapi + ":OP")
-                rest=doREST.doREST(self.svm,'get',nextapi,restargs=self.cgrestargs,debug=self.debug)
-                if rest.result == 200:
-                    for record in rest.response['records']:
-                        for subrecord in record['snapshot_volumes']:
-                            volume=subrecord['volume']['name']
-                            voluuid=subrecord['volume']['uuid']
-                            snapuuid=subrecord['snapshot']['uuid']
-                            cgsnaps.append((volume,voluuid,snapuuid))
-                else:
-                    self.result=1
-                    self.reason=rest.reason
-                    self.stdout=rest.stdout
-                    self.stderr=rest.stderr
-                    if self.debug & 4:
-                        self.showDebug()
-                    return(False)
+            if self.debug & 1:
+                userio.message("Bypassing CG snapshot discovery for " + self.svm,service=localapi + ":OP")
         else:
-            self.result=1
-            self.reason=cgs.reason
-            self.stdout=cgs.stdout
-            self.stderr=cgs.stderr
-            if self.debug & 4:
-                self.showDebug()
-            return(False)
+            if self.debug & 1:
+                userio.message("Retriving CG data on " + self.svm,service=localapi + ":OP")
+            cgs=getCGs(self.svm,volumes=self.volumes,apicaller=localapi,debug=self.debug)
+    
+            if cgs.go():
+                self.cgs=cgs.cgs
+                cgsnaps=[]
+                for cgname in self.cgs.keys():
+                    nextapi=self.cgapi.replace('{UUID}',self.cgs[cgname]['uuid'])
+                    if self.debug & 1:
+                        userio.message("Retriving CG snapshots for CG " + cgname,service=localapi + ":OP")
+                    rest=doREST.doREST(self.svm,'get',nextapi,restargs=self.cgrestargs,debug=self.debug)
+                    if rest.result == 200:
+                        for record in rest.response['records']:
+                            for subrecord in record['snapshot_volumes']:
+                                volume=subrecord['volume']['name']
+                                voluuid=subrecord['volume']['uuid']
+                                snapuuid=subrecord['snapshot']['uuid']
+                                cgsnaps.append((volume,voluuid,snapuuid))
+                    else:
+                        self.result=1
+                        self.reason=rest.reason
+                        self.stdout=rest.stdout
+                        self.stderr=rest.stderr
+                        if self.debug & 4:
+                            self.showDebug()
+                        return(False)
+            else:
+                self.result=1
+                self.reason=cgs.reason
+                self.stdout=cgs.stdout
+                self.stderr=cgs.stderr
+                if self.debug & 4:
+                    self.showDebug()
+                return(False)
 
         for volmatch in self.volumes:
             if volmatch not in self.snapshots.keys():
