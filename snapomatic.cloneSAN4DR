@@ -92,6 +92,7 @@ igrouptoken=myopts.igrouptoken
 
 try:
     recoverytarget=myopts.recoverypoint
+    recoverytarget=recoverytarget-time.localtime().tm_gmtoff
     if myopts.before:
         recoverBefore=True
     else:
