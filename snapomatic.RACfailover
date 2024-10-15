@@ -521,7 +521,7 @@ for dbuname,oraclehome,oraclebase,oracleuseroracle in recovered:
                 needtoopen=[]
                 needtorestart=0
                 if restartpdb:
-                    # force restart of all PDB inside this CDB
+                    # force restart all PDB inside this CDB
                     pdblist=doSqlplus(dbuname + '_1','show pdbs',
                                       user=oracleuser,
                                       home=oraclehome,
@@ -587,7 +587,7 @@ for dbuname,oraclehome,oraclebase,oracleuseroracle in recovered:
                                             debug=debug)
                                 if out.result > 0 and not debug:
                                     out.showDebug()
-                                    
+
                                 if out.result > 0:
                                     print("  >> Error starting database")
                                 else:
