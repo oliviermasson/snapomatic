@@ -577,25 +577,25 @@ for dbuname,oraclehome,oraclebase,oracleuseroracle in recovered:
 
                             if out.result > 0 and not debug:
                                 out.showDebug()
-                            for nodename in gridhome.olsnodes.keys():
-                                print(">> Running svrctl start for " + dbuname)
-                                out=doProcess(oraclehome + '/bin/srvctl stop database -db ' + dbuname \
-                                                            + ' -node ' + nodename,
-                                            env={'ORACLE_HOME':oraclehome,
-                                                    'ORACLE_BASE':oraclebase.base},
-                                            user=oracleuser.user,
-                                            debug=debug)
-                                if out.result > 0 and not debug:
-                                    out.showDebug()
 
-                                if out.result > 0:
-                                    print("  >> Error starting database")
-                                else:
-                                    print("  >> Database start successful")                            
+                            nodename = os.uname().nodename.partition('.')[0]
+                            print(">> Running svrctl start for " + dbuname)
+                            out=doProcess(oraclehome + '/bin/srvctl start database -db ' + dbuname \
+                                                        + ' -node ' + nodename,
+                                        env={'ORACLE_HOME':oraclehome,
+                                                'ORACLE_BASE':oraclebase.base},
+                                        user=oracleuser.user,
+                                        debug=debug)
+                            if out.result > 0 and not debug:
+                                out.showDebug()
 
-                                if out.result > 0 and not debug:
-                                    out.showDebug()
-                                break
+                            if out.result > 0:
+                                print("  >> Error starting database")
+                            else:
+                                print("  >> Database start successful")                            
+
+                            if out.result > 0 and not debug:
+                                out.showDebug()
 print()
 
 print("Results:")
