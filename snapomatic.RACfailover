@@ -17,10 +17,11 @@ from getOracleBase import getOracleBase
 import userio
 import string
 import time
+import textwrap
 
 snapomaticversion='DEV'
 
-validoptions={'volpattern':'str','recoverypoint':'timestamp','snapshot-optimized':'bool','debug':'bool','noscan':'bool','noafd':'bool','noasmlib':'bool','iscsi':'bool'}
+validoptions={'volpattern':'str','recoverypoint':'timestamp','snapshot-optimized':'bool','debug':'bool','noscan':'bool','noafd':'bool','noasmlib':'bool','iscsi':'bool','restartpdb':'bool','nodbadd':'bool','nodbprefix':'bool'}
 requiredoptions=['volpattern']
 
 usage="Version " + snapomaticversion + "\n" + \
@@ -39,7 +40,13 @@ usage="Version " + snapomaticversion + "\n" + \
       "            --noafd\n" + \
       "           (Bypass ASM Filter Driver scanning)\n\n" + \
       "            --noasmlib\n" + \
-      "           (Bypass ASMlib scanning)\n"
+      "           (Bypass ASMlib scanning)\n\n" + \
+      "           --restartpdb\n" + \
+      "           (Once CDB recovered, restart all the PDBs contained in it)\n\n" + \
+      "           --nodbadd\n" + \
+      "           (Bypass srvctl db add)\n\n" + \
+      "           --nodbprefix\n" + \
+      "           (Do not add the N prefix on restored DB)\n"
 
 myopts=userio.validateoptions(sys.argv,validoptions,usage=usage,required=requiredoptions)
 volpattern=myopts.volpattern
@@ -62,6 +69,9 @@ noscan=myopts.noscan
 noasmlib=myopts.noasmlib
 noafd=myopts.noafd
 scaniscsi=myopts.iscsi
+nodbadd=myopts.nodbadd
+nodbprefix=myopts.nodbprefix
+restartpdb=myopts.restartpdb
 
 try:
     recoverypoint=myopts.recoverypoint
@@ -342,7 +352,9 @@ for dbuname in diskgroupmap.keys():
                             oraclehome=versionmapping[avail]
                 if 'db_name=' in line:
                     dbname=line.split('=')[1].replace('"','').replace("'",'')
-                    dbname='N' + dbname
+                    if not nodbprefix:
+                        dbname='N' + dbname
+                    dbname=textwrap.shorten(dbname,width=8,placeholder="")
                     print(">> Database " + dbuname + " has db_name of " + dbname)
         if oraclehome:
             break
@@ -371,26 +383,27 @@ for dbuname in diskgroupmap.keys():
                               debug=debug)
             else:
                 out=doProcess("ssh " + item,user=oracleuser.user,stdin=mkdirs)
-        print(">> Running svrctl add for " + dbuname)
-        out=doProcess(oraclehome + '/bin/srvctl add database -db ' + dbuname \
-                                    + ' -dbname ' + dbname \
-                                    + ' -oraclehome ' + oraclehome \
-                                    + ' -spfile ' + diskgroupmap[dbuname]['SPFILE'] \
-                                    + ' -pwfile ' + diskgroupmap[dbuname]['PWFILE'] \
-                                    + ' -server ' + localhost \
-                                    + ' -diskgroup ' + ','.join(diskgroupmap[dbuname]['DISKGROUPS']) \
-                                    + ' -dbtype RACONENODE',
-                       env={'ORACLE_HOME':oraclehome,
-                            'ORACLE_BASE':oraclebase.base},
-                       user=oracleuser.user,
-                       debug=debug)
-        if out.result > 0 and not debug:
-            out.showDebug()
+        if not nodbadd:
+            print(">> Running svrctl add for " + dbuname)
+            out=doProcess(oraclehome + '/bin/srvctl add database -db ' + dbuname \
+                                        + ' -dbname ' + dbname \
+                                        + ' -oraclehome ' + oraclehome \
+                                        + ' -spfile ' + diskgroupmap[dbuname]['SPFILE'] \
+                                        + ' -pwfile ' + diskgroupmap[dbuname]['PWFILE'] \
+                                        + ' -server ' + localhost \
+                                        + ' -diskgroup ' + ','.join(diskgroupmap[dbuname]['DISKGROUPS']) \
+                                        + ' -dbtype RACONENODE',
+                        env={'ORACLE_HOME':oraclehome,
+                                'ORACLE_BASE':oraclebase.base},
+                        user=oracleuser.user,
+                        debug=debug)
+            if out.result > 0 and not debug:
+                out.showDebug()
 
-        if out.result > 0:
-            print("  >> Error registering database")
-        else:
-            print("  >> Database registration successful")
+            if out.result > 0:
+                print("  >> Error registering database")
+            else:
+                print("  >> Database registration successful")
         registered.append((dbuname,oraclehome,oraclebase.base,oracleuser.user))
         print()
 
@@ -465,6 +478,7 @@ for dbuname,oraclehome,oraclebase,oracleuser in mounted:
 print()
 
 opened=[]
+failed=[]
 alreadyopen=[]
 print("Opening databases...")
 for dbuname,oraclehome,oraclebase,oracleuseroracle in recovered:
@@ -504,9 +518,84 @@ for dbuname,oraclehome,oraclebase,oracleuseroracle in recovered:
             elif len(out.stdout) > 0 and out.stdout[-1] == 'OPEN':
                 print(">> Database " + dbuname + " is open")
                 opened.append(dbuname)
-            if out.result > 0 and not debug:
-                out.showDebug()
+                needtoopen=[]
+                needtorestart=0
+                if restartpdb:
+                    # force restart of all PDB inside this CDB
+                    pdblist=doSqlplus(dbuname + '_1','show pdbs',
+                                      user=oracleuser,
+                                      home=oraclehome,
+                                      base=oraclebase,
+                                      debug=debug)
+                    if pdblist.result > 0:
+                        print(">> Failed to run sqlplus show pdbs")
+                    else:
+                        for line in pdblist.stdout:
+                            if 'MOUNTED' in line:
+                                pdbname=line.split()[0]
+                                pdbstate=line.split()[1:]
+                                if pdbname == "PDB$SEED":
+                                    continue
+                                try:
+                                    ret=pdbstate.index("MOUNTED")
+                                except:
+                                    print(">> PDB " + pdbname + " needs to be open")
+                                    needtoopen.append(pdbname)
+                                    needtorestart+=1
+                        needtoopen=list(set(needtoopen))
+                        for pdbtoopen in needtoopen:
+                            pdbactionopen=doSqlplus(dbuname + '_1','ater pluggable database ' + pdbtoopen + 'open;',
+                                                user=oracleuser,
+                                                home=oraclehome,
+                                                base=oraclebase,
+                                                debug=debug)
+                            if pdbactionopen.result > 0:
+                                print(">> Failed to run sqlplus alter pluggable database " + pdbtoopen + " open")
+                            else:
+                                pdbactionsave=doSqlplus(dbuname + '_1','ater pluggable database ' + pdbtoopen + 'save state;',
+                                                user=oracleuser,
+                                                home=oraclehome,
+                                                base=oraclebase,
+                                                debug=debug)
+                            if pdbactionsave.result > 0:
+                                print(">> Failed to run sqlplus alter pluggable database " + pdbtoopen + " save state")
+                        if needtorestart >= 1:
+                            print(">> Running svrctl stop for " + dbuname)
+                            out=doProcess(oraclehome + '/bin/srvctl stop database -db ' + dbuname \
+                                                        + ' -stopoption immediate',
+                                        env={'ORACLE_HOME':oraclehome,
+                                                'ORACLE_BASE':oraclebase.base},
+                                        user=oracleuser.user,
+                                        debug=debug)
+                            if out.result > 0 and not debug:
+                                out.showDebug()
 
+                            if out.result > 0:
+                                print("  >> Error stoppping database")
+                            else:
+                                print("  >> Database stop successful")                            
+
+                            if out.result > 0 and not debug:
+                                out.showDebug()
+                            for nodename in gridhome.olsnodes.keys():
+                                print(">> Running svrctl start for " + dbuname)
+                                out=doProcess(oraclehome + '/bin/srvctl stop database -db ' + dbuname \
+                                                            + ' -node ' + nodename,
+                                            env={'ORACLE_HOME':oraclehome,
+                                                    'ORACLE_BASE':oraclebase.base},
+                                            user=oracleuser.user,
+                                            debug=debug)
+                                if out.result > 0 and not debug:
+                                    out.showDebug()
+                                    
+                                if out.result > 0:
+                                    print("  >> Error starting database")
+                                else:
+                                    print("  >> Database start successful")                            
+
+                                if out.result > 0 and not debug:
+                                    out.showDebug()
+                                break
 print()
 
 print("Results:")
