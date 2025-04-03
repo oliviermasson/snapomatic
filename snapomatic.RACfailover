@@ -613,8 +613,9 @@ for dbuname,oraclehome,oraclebase,oracleuseroracle,instance_name,recoverycomplet
                             if pdbactionsave.result > 0:
                                 print(">> Failed to run sqlplus alter pluggable database " + pdbtoopen + " save state")
                             else:
-                                print(">> PDB [" + pdbtoopen + " open and saved state")
+                                print(f">> Instance {instance_name} PDB [" + pdbtoopen + "] opened and state saved")
                         if needtorestart >= 1:
+                            print(f">> Restarting {dbuname}...")
                             print(">> Running svrctl stop for " + dbuname)
                             out=doProcess(oraclehome + '/bin/srvctl stop database -db ' + dbuname \
                                                         + ' -stopoption immediate',
