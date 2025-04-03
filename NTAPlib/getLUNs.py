@@ -1,5 +1,6 @@
 import doREST
 import userio
+import sys
 
 class getLUNs:
 

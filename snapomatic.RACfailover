@@ -1,8 +1,8 @@
 #! /usr/bin/python3
 import sys
 pythonversion=sys.version_info
-if pythonversion[0] != 3 or (pythonversion[1] < 6 or pythonversion[1] > 11):
-    print("This script requires Python 3.6 through 3.11")
+if pythonversion[0] != 3 or (pythonversion[1] < 6 or pythonversion[1] > 12):
+    print("This script requires Python 3.6 through 3.12")
     sys.exit(1)
 sys.path.append(sys.path[0] + "/NTAPlib")
 import os
@@ -421,16 +421,54 @@ for dbuname,oraclehome,oraclebase,oracleuser in registered:
                        debug=debug)
     if out.result == 0:
         print("  >> Database mounted")
-        mounted.append((dbuname,oraclehome,oraclebase,oracleuser))
+        print("  >> Running srvctl status database -db " + dbuname)
+        outstatus=doProcess(oraclehome + '/bin/srvctl status database -db ' + dbuname,
+                      env={'ORACLE_HOME':oraclehome,
+                           'ORACLE_BASE':oraclebase},
+                           user=oracleuser,
+                           debug=debug)
+        if outstatus.result > 0:
+            print("  >> Error running srvctl status database")
+            if not debug:
+                outstatus.showDebug()
+        pattern = r"^Instance\s+([A-Z0-9]+_[0-9]+)\s+is\s+running\s+on\s+node\s+([a-z0-9]+$)"
+        match = re.search(pattern, outstatus.stdout)
+        if match:
+            instance_name = match.group(1)
+            node_name = match.group(2)
+            print("  >> Instance " + instance_name + " is mounted on node " + node_name)
+        else:
+            print("  >> Error unable to find instance name with srvctl status output")
+            instance_name = None 
+        mounted.append((dbuname,oraclehome,oraclebase,oracleuser,instance_name))
         mountcomplete=True
     else:
         for line in out.stdout:
             if 'is already running' in line:
                 print("Database " + dbuname + " is already running, will attempt recovery")
-                mounted.append((dbuname,oraclehome,oraclebase,oracleuser))
+                print("  >> Running srvctl status database -db " + dbuname)
+                outstatus=doProcess(oraclehome + '/bin/srvctl status database -db ' + dbuname,
+                            env={'ORACLE_HOME':oraclehome,
+                                'ORACLE_BASE':oraclebase},
+                                user=oracleuser,
+                                debug=debug)
+                if outstatus.result > 0:
+                    print("  >> Error running srvctl status database")
+                    if not debug:
+                        outstatus.showDebug()
+                pattern = r"^Instance\s+([A-Z0-9]+_[0-9]+)\s+is\s+running\s+on\s+node\s+([a-z0-9]+$)"
+                match = re.search(pattern, outstatus.stdout)
+                if match:
+                    instance_name = match.group(1)
+                    node_name = match.group(2)
+                    print("  >> Instance " + instance_name + " is mounted on node " + node_name)
+                else:
+                    print("  >> Error unable to find instance name with srvctl status output")
+                    instance_name = None
+                mounted.append((dbuname,oraclehome,oraclebase,oracleuser,instance_name))
                 mountcomplete=True
                 break
-        if (dbuname,oraclehome,oraclebase,oracleuser) not in mounted:
+        if (dbuname,oraclehome,oraclebase,oracleuser,instance_name) not in mounted:
             print("  >> Error mounting database")
             if not debug:
                 out.showDebug()
@@ -442,24 +480,29 @@ print()
 
 recovered=[]
 print("Recovering databases...")
-for dbuname,oraclehome,oraclebase,oracleuser in mounted:
+for dbuname,oraclehome,oraclebase,oracleuser,instance_name in mounted:
     recoverycomplete=False
-    print(">> Recovering database " + dbuname)
+    if instance_name is None:
+        print(f">> Error Database {dbuname} is not mounted on this node. Skip recover")
+        continue
+    else:
+        print(f">> Database {dbuname} is mounted as instance {instance_name}")
+    print(f">> Recovering database {dbuname} with instance name {instance_name}")
     if rmanrecoverypoint:
         if myopts.snapshot_optimized:
-            out=doSqlplus(dbuname + '_1',"recover automatic database until time '" + rmanrecoverypoint + "' snapshot time '" + snapshottime + "';",
+            out=doSqlplus(instance_name,"recover automatic database until time '" + rmanrecoverypoint + "' snapshot time '" + snapshottime + "';",
                           user=oracleuser,
                           home=oraclehome,
                           base=oraclebase,
                           debug=debug)
         else:
-            out=doSqlplus(dbuname + '_1',"recover automatic database until time '" + rmanrecoverypoint + "';",
+            out=doSqlplus(instance_name,"recover automatic database until time '" + rmanrecoverypoint + "';",
                           user=oracleuser,
                           home=oraclehome,
                           base=oraclebase,
                           debug=debug)
     else:
-        out=doSqlplus(dbuname + '_1','recover automatic;',
+        out=doSqlplus(instance_name,'recover automatic;',
                       user=oracleuser,
                       home=oraclehome,
                       base=oraclebase,
@@ -467,11 +510,16 @@ for dbuname,oraclehome,oraclebase,oracleuser in mounted:
     if out.result == 0 and len(out.stdout) > 0:
         for line in out.stdout:
             print(line)
-            if 'Media recovery complete' or 'no recovery required' in line:
+            if 'Media recovery complete' in line or 'no recovery required' in line:
                 print(">> Database " + dbuname + " recovery complete")
-                recovered.append((dbuname,oraclehome,oraclebase,oracleuser))
                 recoverycomplete=True
+                recovered.append((dbuname,oraclehome,oraclebase,oracleuser,instance_name,recoverycomplete))
                 break 
+            else:
+                print(">> Error Database " + dbuname + " not recovered")
+                recoverycomplete=False
+                recovered.append((dbuname,oraclehome,oraclebase,oracleuser,instance_name,recoverycomplete))
+                break    
 
     if (out.result > 0 or not recoverycomplete) and not debug:
        out.showDebug()
@@ -480,18 +528,23 @@ print()
 opened=[]
 failed=[]
 alreadyopen=[]
+notopened=[]
 print("Opening databases...")
-for dbuname,oraclehome,oraclebase,oracleuseroracle in recovered:
+for dbuname,oraclehome,oraclebase,oracleuseroracle,instance_name,recoverycomplete in recovered:
+    if recoverycomplete is False:
+        print(">> Database " + dbuname + " not recovered, cannot open")
+        notopened.append(dbuname)
+        continue
     print(">> Opening database " + dbuname)
     if rmanrecoverypoint:
-        out=doSqlplus(dbuname + '_1','alter database open resetlogs;',
+        out=doSqlplus(instance_name,'alter database open resetlogs;',
                       user=oracleuser,
                       home=oraclehome,
                       base=oraclebase,
                       debug=debug)
 
     else:
-        out=doSqlplus(dbuname + '_1','alter database open;',
+        out=doSqlplus(instance_name,'alter database open;',
                       user=oracleuser,
                       home=oraclehome,
                       base=oraclebase,
@@ -506,7 +559,7 @@ for dbuname,oraclehome,oraclebase,oracleuseroracle in recovered:
                 alreadyopen.append(dbuname)
                 break
 
-        out=doSqlplus(dbuname + '_1','select status from v$instance',
+        out=doSqlplus(instance_name,'select status from v$instance',
                       user=oracleuser,
                       home=oraclehome,
                       base=oraclebase,
@@ -522,7 +575,7 @@ for dbuname,oraclehome,oraclebase,oracleuseroracle in recovered:
                 needtorestart=0
                 if restartpdb:
                     # force restart all PDB inside this CDB
-                    pdblist=doSqlplus(dbuname + '_1','show pdbs',
+                    pdblist=doSqlplus(instance_name,'show pdbs',
                                       user=oracleuser,
                                       home=oraclehome,
                                       base=oraclebase,
@@ -539,12 +592,12 @@ for dbuname,oraclehome,oraclebase,oracleuseroracle in recovered:
                                 try:
                                     ret=pdbstate.index("MOUNTED")
                                 except:
-                                    print(">> PDB " + pdbname + " needs to be open")
+                                    print(">> PDB [" + pdbname + "] needs to be open")
                                     needtoopen.append(pdbname)
                                     needtorestart+=1
                         needtoopen=list(set(needtoopen))
                         for pdbtoopen in needtoopen:
-                            pdbactionopen=doSqlplus(dbuname + '_1','ater pluggable database ' + pdbtoopen + 'open;',
+                            pdbactionopen=doSqlplus(instance_name,'ater pluggable database ' + pdbtoopen + 'open;',
                                                 user=oracleuser,
                                                 home=oraclehome,
                                                 base=oraclebase,
@@ -552,13 +605,15 @@ for dbuname,oraclehome,oraclebase,oracleuseroracle in recovered:
                             if pdbactionopen.result > 0:
                                 print(">> Failed to run sqlplus alter pluggable database " + pdbtoopen + " open")
                             else:
-                                pdbactionsave=doSqlplus(dbuname + '_1','ater pluggable database ' + pdbtoopen + 'save state;',
+                                pdbactionsave=doSqlplus(instance_name,'ater pluggable database ' + pdbtoopen + 'save state;',
                                                 user=oracleuser,
                                                 home=oraclehome,
                                                 base=oraclebase,
                                                 debug=debug)
                             if pdbactionsave.result > 0:
                                 print(">> Failed to run sqlplus alter pluggable database " + pdbtoopen + " save state")
+                            else:
+                                print(">> PDB [" + pdbtoopen + " open and saved state")
                         if needtorestart >= 1:
                             print(">> Running svrctl stop for " + dbuname)
                             out=doProcess(oraclehome + '/bin/srvctl stop database -db ' + dbuname \
@@ -603,3 +658,5 @@ for item in opened:
     print('Database ' + item + " failover complete")
 for item in alreadyopen:
     print('Database ' + item + ' was opened by external user')
+for item in notopened:
+    print('Database ' + item + ' was not opened')
