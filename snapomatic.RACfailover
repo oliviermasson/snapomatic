@@ -431,17 +431,18 @@ for dbuname,oraclehome,oraclebase,oracleuser in registered:
             print("  >> Error running srvctl status database")
             if not debug:
                 outstatus.showDebug()
-        pattern = r"^Instance\s+([A-Z0-9]+_[0-9]+)\s+is\s+running\s+on\s+node\s+([a-z0-9]+$)"
-        match = re.search(pattern, outstatus.stdout)
-        if match:
-            instance_name = match.group(1)
-            node_name = match.group(2)
-            print("  >> Instance " + instance_name + " is mounted on node " + node_name)
         else:
-            print("  >> Error unable to find instance name with srvctl status output")
-            instance_name = None 
-        mounted.append((dbuname,oraclehome,oraclebase,oracleuser,instance_name))
-        mountcomplete=True
+            pattern = r"^Instance\s+([A-Z0-9]+_[0-9]+)\s+is\s+running\s+on\s+node\s+([a-z0-9]+$)"
+            match = re.search(pattern, outstatus.stdout)
+            if match:
+                instance_name = match.group(1)
+                node_name = match.group(2)
+                print("  >> Instance " + instance_name + " is mounted on node " + node_name)
+            else:
+                print("  >> Error unable to find instance name with srvctl status output")
+                instance_name = None 
+            mounted.append((dbuname,oraclehome,oraclebase,oracleuser,instance_name))
+            mountcomplete=True
     else:
         for line in out.stdout:
             if 'is already running' in line:
@@ -456,18 +457,19 @@ for dbuname,oraclehome,oraclebase,oracleuser in registered:
                     print("  >> Error running srvctl status database")
                     if not debug:
                         outstatus.showDebug()
-                pattern = r"^Instance\s+([A-Z0-9]+_[0-9]+)\s+is\s+running\s+on\s+node\s+([a-z0-9]+$)"
-                match = re.search(pattern, outstatus.stdout)
-                if match:
-                    instance_name = match.group(1)
-                    node_name = match.group(2)
-                    print("  >> Instance " + instance_name + " is mounted on node " + node_name)
                 else:
-                    print("  >> Error unable to find instance name with srvctl status output")
-                    instance_name = None
-                mounted.append((dbuname,oraclehome,oraclebase,oracleuser,instance_name))
-                mountcomplete=True
-                break
+                    pattern = r"^Instance\s+([A-Z0-9]+_[0-9]+)\s+is\s+running\s+on\s+node\s+([a-z0-9]+$)"
+                    match = re.search(pattern, outstatus.stdout)
+                    if match:
+                        instance_name = match.group(1)
+                        node_name = match.group(2)
+                        print("  >> Instance " + instance_name + " is mounted on node " + node_name)
+                    else:
+                        print("  >> Error unable to find instance name with srvctl status output")
+                        instance_name = None
+                    mounted.append((dbuname,oraclehome,oraclebase,oracleuser,instance_name))
+                    mountcomplete=True
+                    break
         if (dbuname,oraclehome,oraclebase,oracleuser,instance_name) not in mounted:
             print("  >> Error mounting database")
             if not debug:
@@ -532,10 +534,10 @@ notopened=[]
 print("Opening databases...")
 for dbuname,oraclehome,oraclebase,oracleuseroracle,instance_name,recoverycomplete in recovered:
     if recoverycomplete is False:
-        print(">> Database " + dbuname + " not recovered, cannot open")
-        notopened.append(dbuname)
+        print(">> Database " + instance_name + " not recovered, cannot open")
+        notopened.append(instance_name)
         continue
-    print(">> Opening database " + dbuname)
+    print(">> Opening database " + instance_name)
     if rmanrecoverypoint:
         out=doSqlplus(instance_name,'alter database open resetlogs;',
                       user=oracleuser,
@@ -554,9 +556,9 @@ for dbuname,oraclehome,oraclebase,oracleuseroracle,instance_name,recoverycomplet
     else:
         for line in out.stdout:
             if 'database already open' in line:
-                print(">> Database " + dbuname + " already open")
+                print(">> Database " + instance_name + " already open")
                 check4open=True
-                alreadyopen.append(dbuname)
+                alreadyopen.append(instance_name)
                 break
 
         out=doSqlplus(instance_name,'select status from v$instance',
@@ -564,13 +566,13 @@ for dbuname,oraclehome,oraclebase,oracleuseroracle,instance_name,recoverycomplet
                       home=oraclehome,
                       base=oraclebase,
                       debug=debug)
-        if dbuname not in alreadyopen:
+        if instance_name not in alreadyopen:
             if out.result > 0:
                 print(">> Failed to run sqlplus")
-                failed.append(dbuname)
+                failed.append(instance_name)
             elif len(out.stdout) > 0 and out.stdout[-1] == 'OPEN':
-                print(">> Database " + dbuname + " is open")
-                opened.append(dbuname)
+                print(">> Database " + instance_name + " is open")
+                opened.append(instance_name)
                 needtoopen=[]
                 needtorestart=0
                 if restartpdb:
@@ -649,7 +651,7 @@ for dbuname,oraclehome,oraclebase,oracleuseroracle,instance_name,recoverycomplet
                                 print("  >> Error starting database")
                             else:
                                 print("  >> Database start successful")                            
-
+                                opened.append(instance_name)
                             if out.result > 0 and not debug:
                                 out.showDebug()
 print()
