@@ -175,7 +175,8 @@ class doSqlplus:
                  "LD_LIBRARY_PATH": myldlibrarypath,
                  "ORACLE_HOME": self.home,
                  "ORACLE_SID": self.sid,
-                 "ORACLE_BASE": self.base}
+                 "ORACLE_BASE": self.base,
+                 "NLS_LANG": "AMERICAN_AMERICA.AL32UTF8"}   # added to force all output to be in english
 
         if self.debug & 16 and not self.debug & 8:
             userio.message('sqlplus -S / as ' + self.priv,service='doSqlPlus.execute:EXEC')

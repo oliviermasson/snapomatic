@@ -1,9 +1,5 @@
 #! /usr/bin/python3
 import sys
-# pythonversion=sys.version_info
-# if pythonversion[0] != 3 or (pythonversion[1] < 6 or pythonversion[1] > 12):
-#     print("This script requires Python 3.6 through 3.12")
-#     sys.exit(1)
 sys.path.append(sys.path[0] + "/NTAPlib")
 import os
 import platform
@@ -113,10 +109,10 @@ else:
             ssh=item
         if scaniscsi:
             print("Updating iSCSI targets")
-            out=doProcess("/usr/sbin/iscsiadm -m session --rescan",env={'PATH':'/usr/bin:/usr/sbin:/bin'},ssh=ssh,debug=debug)
+            out=doProcess("/usr/sbin/iscsiadm -m session --rescan",env={'PATH':'/usr/bin:/usr/sbin:/bin','NLS_LANG':'AMERICAN_AMERICA.AL32UTF8'},ssh=ssh,debug=debug)
         else:
             print("Scanning for FC LUNs")
-            out=doProcess("/usr/bin/rescan-scsi-bus.sh",env={'PATH':'/usr/bin:/usr/sbin:/bin'},ssh=ssh,debug=debug)
+            out=doProcess("/usr/bin/rescan-scsi-bus.sh",env={'PATH':'/usr/bin:/usr/sbin:/bin','NLS_LANG':'AMERICAN_AMERICA.AL32UTF8'},ssh=ssh,debug=debug)
         if not debug and out.result > 0:
             out.showDebug()
             sys.exit(1)
@@ -136,7 +132,7 @@ else:
         else:
             ssh=item
         out=doProcess(gridhome.home + '/bin/asmcmd afd_lslbl',env={'ORACLE_HOME':gridhome.home,
-                                                                   'ORACLE_BASE':gridhome.base},
+                                                                   'ORACLE_BASE':gridhome.base,'NLS_LANG':'AMERICAN_AMERICA.AL32UTF8'},
                                                               ssh=ssh,
                                                               debug=debug)
         if not debug and out.result > 0:
@@ -149,7 +145,7 @@ else:
         else:
             ssh=item
         out=doProcess(gridhome.home + '/bin/asmcmd afd_refresh',env={'ORACLE_HOME':gridhome.home,
-                                                                     'ORACLE_BASE':gridhome.base},
+                                                                     'ORACLE_BASE':gridhome.base,'NLS_LANG':'AMERICAN_AMERICA.AL32UTF8'},
                                                                 ssh=ssh,
                                                                 debug=debug)
         success=False
@@ -196,7 +192,7 @@ for lun in devices:
 
 for item in multipaths:
     if item.luntype == 'NETAPP' and re.match(volpatternmatch,item.volume):
-        header=doProcess(gridhome.home + '/bin/kfed read ' + item.device, env={'ORACLE_HOME':gridhome.home}
+        header=doProcess(gridhome.home + '/bin/kfed read ' + item.device, env={'ORACLE_HOME':gridhome.home,'NLS_LANG':'AMERICAN_AMERICA.AL32UTF8'}
                                                                       , debug=debug)
         if header.stdout is not None:
             try:
@@ -277,7 +273,7 @@ print("Retrieving contents of diskgroups...")
 print(">> Running asmcmd...")
 out=doProcess(gridhome.home + '/bin/asmcmd ls */*/*',
               env={'ORACLE_HOME':gridhome.home,
-                   'ORACLE_BASE':gridhome.base},
+                   'ORACLE_BASE':gridhome.base,'NLS_LANG':'AMERICAN_AMERICA.AL32UTF8'},
               debug=debug)
 
 if out.result > 0 and not debug:
@@ -379,7 +375,7 @@ for dbuname in diskgroupmap.keys():
             if item == localhost:
                 out=doProcess(mkdirs, \
                               user=oracleuser.user, \
-                              env={'PATH':'/usr/bin,/usr/local/bin,/bin'},
+                              env={'PATH':'/usr/bin,/usr/local/bin,/bin','NLS_LANG':'AMERICAN_AMERICA.AL32UTF8'},
                               debug=debug)
             else:
                 out=doProcess("ssh " + item,user=oracleuser.user,stdin=mkdirs)
@@ -394,7 +390,7 @@ for dbuname in diskgroupmap.keys():
                                         + ' -diskgroup ' + ','.join(diskgroupmap[dbuname]['DISKGROUPS']) \
                                         + ' -dbtype RACONENODE',
                         env={'ORACLE_HOME':oraclehome,
-                                'ORACLE_BASE':oraclebase.base},
+                                'ORACLE_BASE':oraclebase.base,'NLS_LANG':'AMERICAN_AMERICA.AL32UTF8'},
                         user=oracleuser.user,
                         debug=debug)
             if out.result > 0 and not debug:
@@ -416,7 +412,7 @@ for dbuname,oraclehome,oraclebase,oracleuser in registered:
     print(">> Mounting database " + dbuname)
     out=doProcess(oraclehome + '/bin/srvctl start database -db ' + dbuname + " -startoption mount",
                   env={'ORACLE_HOME':oraclehome,
-                       'ORACLE_BASE':oraclebase},
+                       'ORACLE_BASE':oraclebase,'NLS_LANG':'AMERICAN_AMERICA.AL32UTF8'},
                        user=oracleuser,
                        debug=debug)
     if out.result == 0:
@@ -424,7 +420,7 @@ for dbuname,oraclehome,oraclebase,oracleuser in registered:
         print("  >> Running srvctl status database -db " + dbuname)
         outstatus=doProcess(oraclehome + '/bin/srvctl status database -db ' + dbuname,
                       env={'ORACLE_HOME':oraclehome,
-                           'ORACLE_BASE':oraclebase},
+                           'ORACLE_BASE':oraclebase,'NLS_LANG':'AMERICAN_AMERICA.AL32UTF8'},
                            user=oracleuser,
                            debug=debug)
         if outstatus.result > 0:
@@ -433,7 +429,7 @@ for dbuname,oraclehome,oraclebase,oracleuser in registered:
                 outstatus.showDebug()
         else:
             pattern = r"^Instance\s+([A-Z0-9]+_[0-9]+)\s+is\s+running\s+on\s+node\s+([a-z0-9]+$)"
-            match = re.search(pattern, outstatus.stdout)
+            match = re.search(pattern, outstatus.stdout[0])
             if match:
                 instance_name = match.group(1)
                 node_name = match.group(2)
@@ -450,7 +446,7 @@ for dbuname,oraclehome,oraclebase,oracleuser in registered:
                 print("  >> Running srvctl status database -db " + dbuname)
                 outstatus=doProcess(oraclehome + '/bin/srvctl status database -db ' + dbuname,
                             env={'ORACLE_HOME':oraclehome,
-                                'ORACLE_BASE':oraclebase},
+                                'ORACLE_BASE':oraclebase,'NLS_LANG':'AMERICAN_AMERICA.AL32UTF8'},
                                 user=oracleuser,
                                 debug=debug)
                 if outstatus.result > 0:
@@ -459,7 +455,7 @@ for dbuname,oraclehome,oraclebase,oracleuser in registered:
                         outstatus.showDebug()
                 else:
                     pattern = r"^Instance\s+([A-Z0-9]+_[0-9]+)\s+is\s+running\s+on\s+node\s+([a-z0-9]+$)"
-                    match = re.search(pattern, outstatus.stdout)
+                    match = re.search(pattern, outstatus.stdout[0])
                     if match:
                         instance_name = match.group(1)
                         node_name = match.group(2)
@@ -599,7 +595,8 @@ for dbuname,oraclehome,oraclebase,oracleuseroracle,instance_name,recoverycomplet
                                     needtorestart+=1
                         needtoopen=list(set(needtoopen))
                         for pdbtoopen in needtoopen:
-                            pdbactionopen=doSqlplus(instance_name,'ater pluggable database ' + pdbtoopen + 'open;',
+                            print(">> Opening PDB [" + pdbtoopen + "]...")
+                            pdbactionopen=doSqlplus(instance_name,'alter pluggable database ' + pdbtoopen + ' open;',
                                                 user=oracleuser,
                                                 home=oraclehome,
                                                 base=oraclebase,
@@ -607,7 +604,7 @@ for dbuname,oraclehome,oraclebase,oracleuseroracle,instance_name,recoverycomplet
                             if pdbactionopen.result > 0:
                                 print(">> Failed to run sqlplus alter pluggable database " + pdbtoopen + " open")
                             else:
-                                pdbactionsave=doSqlplus(instance_name,'ater pluggable database ' + pdbtoopen + 'save state;',
+                                pdbactionsave=doSqlplus(instance_name,'alter pluggable database ' + pdbtoopen + ' save state;',
                                                 user=oracleuser,
                                                 home=oraclehome,
                                                 base=oraclebase,
@@ -622,7 +619,7 @@ for dbuname,oraclehome,oraclebase,oracleuseroracle,instance_name,recoverycomplet
                             out=doProcess(oraclehome + '/bin/srvctl stop database -db ' + dbuname \
                                                         + ' -stopoption immediate',
                                         env={'ORACLE_HOME':oraclehome,
-                                                'ORACLE_BASE':oraclebase.base},
+                                                'ORACLE_BASE':oraclebase.base,'NLS_LANG':'AMERICAN_AMERICA.AL32UTF8'},
                                         user=oracleuser.user,
                                         debug=debug)
                             if out.result > 0 and not debug:
@@ -637,11 +634,11 @@ for dbuname,oraclehome,oraclebase,oracleuseroracle,instance_name,recoverycomplet
                                 out.showDebug()
 
                             nodename = os.uname().nodename.partition('.')[0]
-                            print(">> Running svrctl start for " + dbuname)
+                            print(">> Running svrctl start for " + dbuname + "...")
                             out=doProcess(oraclehome + '/bin/srvctl start database -db ' + dbuname \
                                                         + ' -node ' + nodename,
                                         env={'ORACLE_HOME':oraclehome,
-                                                'ORACLE_BASE':oraclebase.base},
+                                                'ORACLE_BASE':oraclebase.base,'NLS_LANG':'AMERICAN_AMERICA.AL32UTF8'},
                                         user=oracleuser.user,
                                         debug=debug)
                             if out.result > 0 and not debug:
