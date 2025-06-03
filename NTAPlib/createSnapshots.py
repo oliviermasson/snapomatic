@@ -88,7 +88,7 @@ class createSnapshots:
                 json4rest['snapmirror_label'] = self.label
             rest=doREST.doREST(self.svm, \
                                'post', \
-                               '/storage/volumes/' +  matchingvolumes.volumes[volmatch]['uuid'] + '/snapshots?return_timeout=60', \
+                               '/storage/volumes/' +  matchingvolumes.volumesmatch[volmatch]['uuid'] + '/snapshots?return_timeout=60', \
                                json=json4rest, \
                                debug=self.debug)
             if rest.result == 201 and rest.reason=='Created':

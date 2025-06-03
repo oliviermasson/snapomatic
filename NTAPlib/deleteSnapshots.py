@@ -48,6 +48,11 @@ class deleteSnapshots:
         if 'force' in kwargs.keys():
             self.force=kwargs['force']
 
+        if 'nocgs' in kwargs.keys():
+            self.nocgs=kwargs['nocgs']
+        else:
+            self.nocgs=False
+
         if self.debug & 1:
             userio.message('',service=localapi + ":INIT")
 
@@ -98,7 +103,7 @@ class deleteSnapshots:
 
         if self.debug & 1:
             userio.message("Retriving snapshots for " + ','.join(self.volumematch),service=localapi + ":OP")
-        snapshots=getSnapshots(self.svm,volumes=self.volumematch,name=self.snapshotmatch,apicaller=localapi,debug=self.debug)
+        snapshots=getSnapshots(self.svm,volumes=self.volumematch,name=self.snapshotmatch,nocgs=self.nocgs,apicaller=localapi,debug=self.debug)
 
         if not snapshots.go():
             self.result=1
@@ -122,7 +127,7 @@ class deleteSnapshots:
                     if self.maxage:
                         if now - epoch > self.maxage:
                             if self.debug & 1:
-                                userio.message("Snapshot " + volume + ":" + snap + " exceeds max age",service=localapi + ":OP")
+                                userio.message("Snapshot " + target + ":" + snap + " exceeds max age",service=localapi + ":OP")
                             snapshots2delete.append((target,targetuuid,snap,snapuuid,epoch))
                     else:
                         snapshots2delete.append((target,targetuuid,snap,snapuuid,epoch))

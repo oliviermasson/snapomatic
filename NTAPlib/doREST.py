@@ -40,9 +40,9 @@ class doREST():
         if os.getenv("SNAPOMATIC_CREDENTIAL_PATH") is not None:
             configFile=os.getenv("SNAPOMATIC_CREDENTIAL_PATH")
         elif os.name=='posix':
-            configFile='/etc/snapomatic/config.json'
+            configFile=r'/etc/snapomatic/config.json'
         elif os.name=='nt':
-            configFile='c:\snapomatic\config.json'
+            configFile=r'c:\snapomatic\config.json'
 
         if 'debug' in kwargs.keys():
             self.debug=kwargs['debug']

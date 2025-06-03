@@ -44,7 +44,7 @@ usage="Version " + snapomaticversion + "\n" + \
       "        (svm [filesystem, LUN, or volume]\n\n" + \
       "        (Optional. Name for snapshot. Wildcards accepted.)\n\n" + \
       "        [--cg]\n" + \
-      "        (Restrict search to CG snapshots. Wildcards accepted.)\n\n" + \
+      "        (Boolean. Restrict search to CG snapshots)\n\n" + \
       "        [--debug]\n" + \
       "        (show debug output)\n\n" + \
       "        [--restdebug]\n" + \
@@ -72,6 +72,8 @@ usage="Version " + snapomaticversion + "\n" + \
       "        [--maxage]\n" + \
       "        (Optional. Maximum age of snapshots to retain.\n" + \
       "        (Accepts d[ays]/h[ours]/m[inutes]/[s]econds\n\n" + \
+      "        [--cg]\n" + \
+      "        (Restrict search to CG snapshots. Wildcards accepted.)\n\n" + \
       "        [--force]\n" + \
       "        (Override all safeguards)\n\n" + \
       "        [--debug]\n" + \
@@ -136,17 +138,23 @@ if myopts.mode == 'delete':
             grid=[['Volume','Snapshot','Status']]
         if not snapshots.go():
             userio.message("ERROR: " + snapshots.reason)
-        else:
+        elif len(snapshots.deleted) > 0:
             userio.message("Success")
+        else:
+            userio.message("No snapshots deleted")
         deleted=list(snapshots.deleted.keys())
         deleted.sort()
         if cg:
             for cg in deleted:
-                deletedvols=list(snapshots.deleted[cg])
-                deletedvols.sort()
-                for volume in deletedvols:
-                    for snap in snapshots.deleted[cg][volume]:
-                        grid.append([cg,volume,snap,'Deleted'])
+                deletedsnapshots=list(snapshots.deleted[cg])
+                deletedsnapshots.sort()
+                for volume in snapshots.snapshots2delete:
+                    if volume[0] == cg:
+                        volumelist=volume[1]['volumes']
+                        snap=volume[2]
+                        if snap in deletedsnapshots:
+                            for vol in volumelist:
+                                grid.append([cg,vol,snap,'Deleted'])
         else:
             for volume in deleted:
                 for snap in snapshots.deleted[volume]:
@@ -190,9 +198,9 @@ elif myopts.mode == 'create':
 elif myopts.mode == 'show':
     if len(voltargets) > 0:
         if cg:
-            snapshots=getCGSnapshots(svm,cgs=voltargets,cg=True,name=name,debug=debug)
+            snapshots=getCGSnapshots(svm,cgs=voltargets,cg=True,name=name,nocgs=False,debug=debug)
         else:
-            snapshots=getSnapshots(svm,volumes=voltargets,name=name,debug=debug)
+            snapshots=getSnapshots(svm,volumes=voltargets,name=name,nocgs=True,debug=debug)
         if not snapshots.go():
             userio.message("ERROR: " + snapshots.reason)
             sys.exit(1)

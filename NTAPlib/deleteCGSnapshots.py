@@ -98,7 +98,7 @@ class deleteCGSnapshots:
         mycgs=getCGs(self.svm,name=self.cgmatch,apicaller=localapi,debug=self.debug)
         if not mycgs.go():
             self.result=1
-            self.reason=mycgss.reason
+            self.reason=mycgs.reason
             self.stdout=mycgs.stdout
             self.stderr=mycgs.stderr
             if self.debug & 1:
